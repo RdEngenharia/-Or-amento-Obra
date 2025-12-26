@@ -91,6 +91,12 @@
     
     .hidden { display: none !important; }
 
+    /* Estilo Adicional para o Histórico */
+    .history-card { 
+      background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 10px; 
+      display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--primary);
+    }
+
     @media (max-width: 600px) {
       .menu-grid { grid-template-columns: 1fr; }
     }
@@ -123,11 +129,21 @@
         <i class="fas fa-file-invoice-dollar"></i>
         <span>Orçamentos (NBR 5410)</span>
       </div>
+      <div class="menu-card" onclick="abrirHistorico()">
+        <i class="fas fa-archive"></i>
+        <span>Orçamentos Salvos</span>
+      </div>
       <div class="menu-card" onclick="window.open('https://wa.me/73991317853')">
         <i class="fab fa-whatsapp"></i>
         <span>Suporte Técnico</span>
       </div>
     </div>
+  </div>
+
+  <div id="view-historico" class="view">
+    <div class="btn-back" onclick="showView('view-menu')"><i class="fas fa-arrow-left"></i> Voltar</div>
+    <h2><i class="fas fa-history"></i> Histórico de Clientes</h2>
+    <div id="lista-historico"></div>
   </div>
 
   <div id="view-orcamento" class="view">
@@ -140,7 +156,7 @@
         <div style="flex: 2;">
           <label>Cliente:</label>
           <input type="text" id="orc-cliente" placeholder="Nome do cliente">
-        </div>
+          <input type="hidden" id="orc-id-db"> </div>
         <div>
           <label>Validade (Dias):</label>
           <input type="number" id="orc-validade" value="5">
@@ -256,15 +272,27 @@
       </div>
     </div>
 
-    <button class="main-btn" onclick="gerarPDF()">GERAR PDF TÉCNICO COMPLETO</button>
+    <button class="main-btn" onclick="salvarNoBanco()" style="background:var(--secondary); margin-bottom: 5px;"><i class="fas fa-save"></i> SALVAR NO DISPOSITIVO</button>
+    <button class="main-btn" onclick="gerarPDF()"><i class="fas fa-file-pdf"></i> GERAR PDF TÉCNICO COMPLETO</button>
   </div>
 </div>
 
 <script>
-  // LÓGICA DE LOGIN
+  // --- INICIALIZAÇÃO DO BANCO DE DADOS (INDEXEDDB) ---
+  let db;
+  const dbReq = indexedDB.open("RD_Engenharia_DB", 1);
+  dbReq.onupgradeneeded = e => {
+    db = e.target.result;
+    if (!db.objectStoreNames.contains("orcamentos")) {
+      db.createObjectStore("orcamentos", { keyPath: "id", autoIncrement: true });
+    }
+  };
+  dbReq.onsuccess = e => db = e.target.result;
+
+  // LÓGICA DE LOGIN (Original mantida)
   function checkLogin() {
     const pass = document.getElementById('pass-input').value;
-    if (pass === "RD123") { // SENHA AQUI
+    if (pass === "RD123") {
         document.getElementById('login-overlay').style.display = 'none';
         document.getElementById('main-header').style.display = 'flex';
         document.getElementById('main-container').style.display = 'block';
@@ -272,7 +300,6 @@
         document.getElementById('login-error').style.display = 'block';
     }
   }
-  // Permitir "Enter" no login
   document.getElementById('pass-input').addEventListener('keypress', function (e) {
     if (e.key === 'Enter') checkLogin();
   });
@@ -301,6 +328,75 @@
     document.querySelectorAll('.view, #view-menu').forEach(v => v.classList.remove('active-view'));
     document.getElementById(viewId).classList.add('active-view');
   }
+
+  // --- FUNÇÕES DE BANCO DE DADOS E HISTÓRICO ---
+  function salvarNoBanco() {
+    const cliente = document.getElementById('orc-cliente').value;
+    if (!cliente) return alert("Por favor, digite o nome do cliente antes de salvar.");
+    
+    const idExistente = document.getElementById('orc-id-db').value;
+    const orcamento = {
+      cliente: cliente,
+      validade: document.getElementById('orc-validade').value,
+      padrao: document.getElementById('padrao').value,
+      tensao: document.getElementById('tensao').value,
+      distGeral: document.getElementById('dist-geral').value,
+      itens: itens,
+      data: new Date().toLocaleString()
+    };
+
+    if(idExistente) orcamento.id = parseInt(idExistente);
+
+    const trans = db.transaction("orcamentos", "readwrite");
+    trans.objectStore("orcamentos").put(orcamento);
+    trans.oncomplete = () => alert("Orçamento de " + cliente + " salvo com sucesso!");
+  }
+
+  function abrirHistorico() {
+    const lista = document.getElementById('lista-historico');
+    lista.innerHTML = "";
+    const store = db.transaction("orcamentos").objectStore("orcamentos");
+    store.openCursor().onsuccess = e => {
+      const cursor = e.target.result;
+      if (cursor) {
+        const v = cursor.value;
+        lista.innerHTML += `
+          <div class="history-card">
+            <div><strong>${v.cliente}</strong><br><small>${v.data}</small></div>
+            <div>
+              <button onclick="carregarOrcamento(${v.id})" style="width:auto; padding:5px 10px; background:var(--primary); color:white; border:none; margin-right:5px;">Abrir</button>
+              <button onclick="deletarOrcamento(${v.id})" style="width:auto; padding:5px 10px; background:var(--danger); color:white; border:none;">X</button>
+            </div>
+          </div>`;
+        cursor.continue();
+      }
+    };
+    showView('view-historico');
+  }
+
+  function carregarOrcamento(id) {
+    db.transaction("orcamentos").objectStore("orcamentos").get(id).onsuccess = e => {
+      const v = e.target.result;
+      document.getElementById('orc-cliente').value = v.cliente;
+      document.getElementById('orc-validade').value = v.validade;
+      document.getElementById('padrao').value = v.padrao;
+      atualizarOpcoesTensao();
+      document.getElementById('tensao').value = v.tensao;
+      document.getElementById('dist-geral').value = v.distGeral;
+      document.getElementById('orc-id-db').value = v.id;
+      itens = v.itens;
+      atualizar();
+      showView('view-orcamento');
+    };
+  }
+
+  function deletarOrcamento(id) {
+    if(confirm("Deseja apagar este orçamento permanentemente?")) {
+      db.transaction("orcamentos", "readwrite").objectStore("orcamentos").delete(id).onsuccess = () => abrirHistorico();
+    }
+  }
+
+  // --- LÓGICA ORIGINAL CONTINUA ABAIXO ---
 
   function atualizarOpcoesTensao() {
     const padrao = document.getElementById('padrao').value;
