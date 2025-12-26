@@ -287,19 +287,36 @@
       db.createObjectStore("orcamentos", { keyPath: "id", autoIncrement: true });
     }
   };
-  dbReq.onsuccess = e => db = e.target.result;
+  dbReq.onsuccess = e => { 
+    db = e.target.result;
+    // CIRÚRGICO: Tenta carregar o estado de login salvo no navegador assim que o DB estiver pronto
+    checkLoginPersistido();
+  };
 
-  // LÓGICA DE LOGIN (Original mantida)
+  // CIRÚRGICO: Função que verifica se o usuário já logou anteriormente
+  function checkLoginPersistido() {
+    if (localStorage.getItem('rd_autenticado') === 'true') {
+        liberarAcesso();
+    }
+  }
+
+  function liberarAcesso() {
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('main-header').style.display = 'flex';
+    document.getElementById('main-container').style.display = 'block';
+  }
+
+  // LÓGICA DE LOGIN (Atualizada para persistir)
   function checkLogin() {
     const pass = document.getElementById('pass-input').value;
     if (pass === "RD123") {
-        document.getElementById('login-overlay').style.display = 'none';
-        document.getElementById('main-header').style.display = 'flex';
-        document.getElementById('main-container').style.display = 'block';
+        localStorage.setItem('rd_autenticado', 'true'); // CIRÚRGICO: Salva o login
+        liberarAcesso();
     } else {
         document.getElementById('login-error').style.display = 'block';
     }
   }
+
   document.getElementById('pass-input').addEventListener('keypress', function (e) {
     if (e.key === 'Enter') checkLogin();
   });
@@ -348,7 +365,8 @@
     if(idExistente) orcamento.id = parseInt(idExistente);
 
     const trans = db.transaction("orcamentos", "readwrite");
-    trans.objectStore("orcamentos").put(orcamento);
+    const store = trans.objectStore("orcamentos");
+    store.put(orcamento);
     trans.oncomplete = () => alert("Orçamento de " + cliente + " salvo com sucesso!");
   }
 
@@ -594,7 +612,7 @@
       <b>Carga Instalada:</b> ${(c.instalada/1000).toFixed(2)} kW | 
       <b>Demanda:</b> ${(c.demanda/1000).toFixed(2)} kW
     `;
-    document.getElementById('valor-total').innerText = `R$ ${totalMO_Itens.toLocaleString('pt-BR')}`;
+    document.getElementById('valor-total').innerText = `R$ ${totalMO_Itens.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
   }
 
   function getBitolaCircuito(corrente, dist = 0) {
@@ -651,7 +669,7 @@
         ...itens.map(i => [i.desc]),
         [`Instalação de Proteção do Padrão de Entrada`],
         [`Montagem de Quadro de Distribuição (${c.totalCircuitos} circuitos)`],
-        [{content: `VALOR TOTAL DA MÃO DE OBRA: R$ ${valorFinal.toLocaleString('pt-BR')}`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] }}]
+        [{content: `VALOR TOTAL DA MÃO DE OBRA: R$ ${valorFinal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] }}]
       ],
       headStyles: { fillColor: [10, 124, 255] }
     });
@@ -768,15 +786,10 @@
     const finalY = doc.lastAutoTable.finalY + 15;
     doc.setFontSize(9); doc.setTextColor(100);
     doc.text(`Espaço total ocupado: ${totalModulosDIN} módulos DIN. Quadro dimensionado para ${tamanhoQuadro} módulos (Reserva NBR 5410 inclusa).`, 20, finalY);
-    doc.text(`RD ENGENHARIA ELÉTRICA | CNPJ: ${CNPJ_RD}`, 105, finalY + 10, { align: "center" });
-    doc.save(`Orcamento_RD_${cliente}.pdf`);
+    
+    doc.save(`Orcamento_${cliente.replace(/\s+/g, '_')}.pdf`);
   }
 </script>
+
 </body>
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').then(() => console.log("Pronto.")).catch(err => console.log(err));
-  }
-</script>
-<link rel="manifest" href="manifest.json">
 </html>
