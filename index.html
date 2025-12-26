@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-PT">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,48 +10,118 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
   
   <style>
-    :root { --primary: #0a7cff; --secondary: #25d366; --danger: #e74c3c; --bg: #f2f6fa; --text: #333; }
+    :root {
+      --primary: #0a7cff;
+      --secondary: #25d366;
+      --danger: #e74c3c;
+      --bg: #f2f6fa;
+      --text: #333;
+    }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; }
-    header { background: var(--primary); color: white; padding: 15px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-    .logo-container img { max-height: 60px; width: auto; }
-    .container { max-width: 900px; margin: auto; padding: 20px; }
+    
+    /* Estilos da Tela de Login */
+    #login-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: var(--primary); display: flex; align-items: center; justify-content: center;
+      z-index: 1000; transition: 0.5s;
+    }
+    .login-box {
+      background: white; padding: 30px; border-radius: 15px; 
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 90%; max-width: 350px; text-align: center;
+    }
+    .login-box h3 { color: var(--primary); margin-bottom: 20px; }
+    .login-box input { margin-bottom: 15px; text-align: center; }
+
+    header { 
+      background: var(--primary); 
+      color: white; 
+      padding: 15px; 
+      text-align: center; 
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-container img {
+      max-height: 60px;
+      width: auto;
+    }
+
+    .container { max-width: 900px; margin: auto; padding: 20px; display: none; } /* Oculto até login */
+    
     .view { display: none; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
     .active-view { display: block; animation: fadeIn 0.3s; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
-    .menu-card { background: white; padding: 40px 20px; border-radius: 12px; text-align: center; cursor: pointer; border: 1px solid #eee; transition: 0.3s; }
-    .menu-card:hover { transform: translateY(-5px); border-color: var(--primary); }
+    
+    .menu-grid { 
+      display: grid; 
+      grid-template-columns: 1fr 1fr; 
+      gap: 20px; 
+      margin-top: 20px; 
+    }
+    .menu-card { 
+      background: white; padding: 40px 20px; border-radius: 12px; text-align: center; 
+      cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: 0.3s;
+      border: 1px solid #eee;
+    }
+    .menu-card:hover { transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); border-color: var(--primary); }
     .menu-card i { font-size: 3rem; color: var(--primary); margin-bottom: 15px; display: block; }
+    .menu-card span { font-weight: bold; color: var(--text); font-size: 1.1rem; }
+
     .section-box { border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; background: #fafafa; }
-    h4 { margin: 0 0 10px 0; color: #555; text-transform: uppercase; font-size: 0.75rem; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+    h4 { margin: 0 0 10px 0; color: #555; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 1px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+    h2 { color: var(--primary); display: flex; align-items: center; gap: 10px; margin-top: 0; }
+    
     .btn-back { background: #eee; padding: 8px 15px; border-radius: 20px; cursor: pointer; display: inline-block; margin-bottom: 15px; font-weight: bold; font-size: 0.8rem; }
+    
+    label { font-size: 0.85rem; color: #666; margin-top: 10px; display: block; font-weight: bold; }
     input, select, button { width: 100%; padding: 12px; margin-top: 8px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; }
+    
     .grid-flex { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
     .grid-flex > div { flex: 1; min-width: 120px; }
+    
     button.main-btn { background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 15px; padding: 15px; }
-    .btn-add { background: #6c757d; color: white; padding: 10px; border: none; cursor: pointer; border-radius: 5px; width: auto; }
+    .btn-add { background: #6c757d; color: white; padding: 10px; font-size: 0.85rem; border: none; cursor: pointer; border-radius: 5px; width: auto; }
+    
     .summary-box { background: #fff; padding: 20px; border-radius: 8px; margin-top: 20px; border-left: 5px solid var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     .item-list { font-size: 0.9rem; border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
-    .btn-del { color: var(--danger); cursor: pointer; }
-    .total-row { margin-top:15px; font-weight:bold; font-size: 1.2rem; color: var(--primary); border-top: 1px dashed #ccc; padding-top: 10px; }
+    .btn-del { color: var(--danger); cursor: pointer; padding: 5px; }
+    .total-row { margin-top:15px; font-weight:bold; font-size: 1.1rem; color: var(--primary); border-top: 1px dashed #ccc; padding-top: 10px; }
+    
     .hidden { display: none !important; }
+
+    @media (max-width: 600px) {
+      .menu-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 
-<header>
+<div id="login-overlay">
+  <div class="login-box">
+    <img src="logo.png" alt="RD Logo" style="max-height: 50px; margin-bottom: 10px;" onerror="this.style.display='none'">
+    <h3>Acesso Restrito</h3>
+    <input type="password" id="pass-input" placeholder="Digite a Senha">
+    <button class="main-btn" onclick="checkLogin()">ENTRAR</button>
+    <p id="login-error" style="color:red; font-size: 0.8rem; margin-top: 10px; display: none;">Senha Incorreta!</p>
+  </div>
+</div>
+
+<header id="main-header" style="display:none;">
   <div class="logo-container">
-    <img src="logo.png" alt="RD Engenharia" onerror="this.style.display='none'">
+    <img src="logo.png" alt="RD Engenharia Logo" onerror="this.style.display='none'">
   </div>
   <div style="font-weight: bold; font-size: 1.3rem;">RD ENGENHARIA ELÉTRICA</div>
 </header>
 
-<div class="container">
+<div class="container" id="main-container">
+  
   <div id="view-menu" class="active-view">
     <div class="menu-grid">
       <div class="menu-card" onclick="showView('view-orcamento')">
         <i class="fas fa-file-invoice-dollar"></i>
-        <span>Novo Orçamento</span>
+        <span>Orçamentos (NBR 5410)</span>
       </div>
       <div class="menu-card" onclick="window.open('https://wa.me/73991317853')">
         <i class="fab fa-whatsapp"></i>
@@ -62,31 +132,70 @@
 
   <div id="view-orcamento" class="view">
     <div class="btn-back" onclick="showView('view-menu')"><i class="fas fa-arrow-left"></i> Voltar</div>
-    <h2><i class="fas fa-calculator"></i> Orçamento Técnico</h2>
+    <h2><i class="fas fa-calculator"></i> Novo Orçamento Técnico</h2>
     
     <div class="section-box">
-      <h4>Dados do Cliente</h4>
+      <h4>Dados do Orçamento e Cliente</h4>
       <div class="grid-flex">
-        <div style="flex: 2;"><label>Cliente:</label><input type="text" id="orc-cliente" placeholder="Nome"></div>
-        <div><label>Validade (Dias):</label><input type="number" id="orc-validade" value="5"></div>
+        <div style="flex: 2;">
+          <label>Cliente:</label>
+          <input type="text" id="orc-cliente" placeholder="Nome do cliente">
+        </div>
+        <div>
+          <label>Validade (Dias):</label>
+          <input type="number" id="orc-validade" value="5">
+        </div>
       </div>
     </div>
 
     <div class="section-box">
-      <h4>Dados da Instalação</h4>
+      <h4>Dados da Instalação e Entrada</h4>
       <div class="grid-flex">
-        <div><label>Padrão:</label><select id="padrao" onchange="atualizarOpcoesTensao()"><option value="1">Monofásico</option><option value="2">Bifásico</option><option value="3">Trifásico</option></select></div>
-        <div><label>Tensão:</label><select id="tensao"><option value="127">127V (F+N)</option><option value="220">220V (F+N ou F+F)</option></select></div>
-        <div><label>Dist. Padrão ao QDC (m):</label><input type="number" id="dist-geral" value="10"></div>
+        <div>
+          <label>Padrão:</label>
+          <select id="padrao" onchange="atualizarOpcoesTensao()">
+            <option value="1">Monofásico</option>
+            <option value="2">Bifásico</option>
+            <option value="3">Trifásico</option>
+          </select>
+        </div>
+        <div>
+          <label>Tensão (V):</label>
+          <select id="tensao">
+            <option value="127">127V (F+N)</option>
+            <option value="220">220V (F+N ou F+F)</option>
+          </select>
+        </div>
+        <div>
+          <label>Dist. Padrão ao QDC (m):</label>
+          <input type="number" id="dist-geral" value="10">
+        </div>
       </div>
     </div>
 
     <div class="section-box">
-      <h4>Pontos de Uso Geral</h4>
+      <h4>Pontos de Uso Geral e Iluminação</h4>
       <div class="grid-flex">
-        <div style="flex: 2;"><label>Item:</label><select id="tipo-ponto" onchange="togglePotenciaField()"><option value="luz" data-preco="25">Ponto de Luz</option><option value="tug" data-preco="45">Tomada (TUG)</option><option value="tug_dupla" data-preco="65">Tomada Dupla (TUG)</option><option value="int_simples" data-preco="35" data-is-switch="true">Interruptor Simples</option><option value="aterramento" data-preco="200">Aterramento (Haste)</option></select></div>
-        <div id="container-potencia"><label>Watts:</label><input type="number" id="ponto-pot" value="100"></div>
-        <div><label>Qtd:</label><input type="number" id="ponto-qtd" value="1"></div>
+        <div style="flex: 2;">
+          <label>Item:</label>
+          <select id="tipo-ponto" onchange="togglePotenciaField()">
+            <option value="luz" data-preco="25">Ponto de Luz (Simples)</option>
+            <option value="tug" data-preco="45">Tomada Simples (TUG)</option>
+            <option value="tug_dupla" data-preco="65">Tomada Dupla (TUG)</option>
+            <option value="int_simples" data-preco="35" data-is-switch="true">Interruptor Simples</option>
+            <option value="int_duplo" data-preco="55" data-is-switch="true">Interruptor Duplo</option>
+            <option value="three_way" data-preco="60" data-is-switch="true">Three-Way (Paralelo)</option>
+            <option value="aterramento" data-preco="200">Aterramento (Quantidade de Hastes)</option>
+          </select>
+        </div>
+        <div id="container-potencia">
+          <label>Potência (W):</label>
+          <input type="number" id="ponto-pot" value="100">
+        </div>
+        <div>
+          <label>Qtd:</label>
+          <input type="number" id="ponto-qtd" value="1">
+        </div>
         <button class="btn-add" onclick="addItem()">+ Add</button>
       </div>
     </div>
@@ -94,32 +203,99 @@
     <div class="section-box">
       <h4>Cargas Especiais (TUE)</h4>
       <div class="grid-flex">
-        <div style="flex: 2;"><label>Equipamento:</label><select id="tue-select" onchange="toggleTueManual()"><option value="chuveiro">Chuveiro</option><option value="ar_cond">Ar Condicionado</option><option value="outro">Outro</option></select></div>
-        <div id="div-tue-btu" class="hidden"><label>BTUs:</label><select id="tue-btu"><option value="9000">9.000</option><option value="12000">12.000</option><option value="18000">18.000</option></select></div>
-        <div id="div-tue-manual"><label>Watts:</label><input type="number" id="tue-pot" value="5500"></div>
-        <div><label>Dist.(m):</label><input type="number" id="tue-dist" value="15"></div>
-        <button class="btn-add" onclick="addTUE()">+ TUE</button>
+        <div style="flex: 2;">
+          <label>Tipo de TUE:</label>
+          <select id="tue-select" onchange="toggleTueManual()">
+            <option value="chuveiro">Chuveiro Elétrico</option>
+            <option value="ar_cond">Ar Condicionado</option>
+            <option value="outro">Outro (Manual)</option>
+          </select>
+        </div>
+        <div id="div-tue-btu" class="hidden">
+            <label>Capacidade (BTU):</label>
+            <select id="tue-btu">
+                <option value="7500">7.500 BTU</option>
+                <option value="9000">9.000 BTU</option>
+                <option value="10000">10.000 BTU</option>
+                <option value="12000">12.000 BTU</option>
+                <option value="15000">15.000 BTU</option>
+                <option value="18000">18.000 BTU</option>
+                <option value="21000">21.000 BTU</option>
+                <option value="30000">30.000 BTU</option>
+                <option value="41000">41.000 BTU</option>
+                <option value="60000">60.000 BTU</option>
+            </select>
+        </div>
+        <div id="div-tue-manual">
+          <label>Potência (W):</label>
+          <input type="number" id="tue-pot" value="5500">
+        </div>
+        <div>
+          <label>Distância (m):</label>
+          <input type="number" id="tue-dist" value="15">
+        </div>
+        <button class="btn-add" onclick="addTUE()">+ Add TUE</button>
       </div>
-      <div id="div-tue-nome" class="hidden"><label>Nome:</label><input type="text" id="tue-nome-custom" placeholder="Ex: Forno"></div>
+      <div id="div-tue-nome" class="hidden">
+          <label>Descrição Personalizada:</label>
+          <input type="text" id="tue-nome-custom" placeholder="Ex: Forno Elétrico">
+      </div>
     </div>
 
     <div class="summary-box">
-      <h4>Resumo da Proposta</h4>
+      <h4>Detalhamento da Proposta</h4>
       <div id="lista-itens"></div>
-      <div id="calculo-detalhes" style="margin-top:10px; font-size:0.85rem; color:#666;"></div>
-      <div class="total-row"><span>Total:</span> <span id="valor-total">R$ 0,00</span></div>
+      <div id="calculo-detalhes" style="margin-top:15px; font-size:0.85rem; color:#666; background:#f9f9f9; padding:10px; border-radius:5px;"></div>
+      <div class="total-row">
+        <span>Total Estimado:</span>
+        <span id="valor-total">R$ 0,00</span>
+      </div>
+      <div style="font-size: 0.7rem; color: #999; margin-top: 10px;">
+        RD ENGENHARIA ELÉTRICA | CNPJ: 44.367.932/0001-42<br>
+        Dimensionamento baseado na NBR 5410 e Normas COELBA.
+      </div>
     </div>
 
-    <button class="main-btn" onclick="gerarPDF()">GERAR PDF COMPLETO</button>
+    <button class="main-btn" onclick="gerarPDF()">GERAR PDF TÉCNICO COMPLETO</button>
   </div>
 </div>
 
 <script>
+  // LÓGICA DE LOGIN
+  function checkLogin() {
+    const pass = document.getElementById('pass-input').value;
+    if (pass === "RD123") { // SENHA AQUI
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('main-header').style.display = 'flex';
+        document.getElementById('main-container').style.display = 'block';
+    } else {
+        document.getElementById('login-error').style.display = 'block';
+    }
+  }
+  // Permitir "Enter" no login
+  document.getElementById('pass-input').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') checkLogin();
+  });
+
   let itens = [];
   const PRECO_MONTAGEM_CIRCUITO = 150.00;
-  const PRECO_DISJUNTOR_PADRAO = 80.00;
-  
-  const TABELA_AR = { 9000: { w: 1300 }, 12000: { w: 1600 }, 18000: { w: 2600 } };
+  const PRECO_DISJUNTOR_PADRAO = 80.00; 
+  const CNPJ_RD = "44.367.932/0001-42";
+
+  const TABELA_AR = {
+      7500:  { w: 900,  i110: 10,  i220: 5 },
+      9000:  { w: 1300, i110: 14,  i220: 7 },
+      10000: { w: 1400, i110: 15,  i220: 7.5 },
+      12000: { w: 1600, i110: 17,  i220: 8.5 },
+      15000: { w: 1900, i110: null, i220: 9.5 },
+      18000: { w: 2600, i110: null, i220: 13 },
+      21000: { w: 2800, i110: null, i220: 14 },
+      30000: { w: 3800, i110: null, i220: 18 },
+      41000: { w: 5000, i110: null, i220: 14.5 },
+      60000: { w: 7500, i110: null, i220: 24.0 }
+  };
+
+  const TABELA_FD_CHUVEIRO = [1.0, 1.0, 0.84, 0.76, 0.70, 0.65, 0.60, 0.57, 0.54, 0.52, 0.49, 0.48, 0.46, 0.45, 0.44, 0.43, 0.42, 0.41, 0.40, 0.40, 0.39, 0.39, 0.39, 0.38, 0.38];
 
   function showView(viewId) {
     document.querySelectorAll('.view, #view-menu').forEach(v => v.classList.remove('active-view'));
@@ -127,43 +303,94 @@
   }
 
   function atualizarOpcoesTensao() {
-    const p = document.getElementById('padrao').value;
-    const s = document.getElementById('tensao');
-    s.innerHTML = (p === "3") ? '<option value="220">220V</option><option value="380">380V</option>' : '<option value="127">127V</option><option value="220">220V</option>';
+    const padrao = document.getElementById('padrao').value;
+    const tensaoSelect = document.getElementById('tensao');
+    tensaoSelect.innerHTML = '';
+    
+    if (padrao === "3") { 
+      tensaoSelect.innerHTML = `
+        <option value="220">220V (F+N - Trif. 220V)</option>
+        <option value="380">380V (F+N - Trif. 380V)</option>
+      `;
+    } else { 
+      tensaoSelect.innerHTML = `
+        <option value="127">127V (F+N)</option>
+        <option value="220">220V (F+N ou F+F)</option>
+      `;
+    }
   }
 
   function toggleTueManual() {
-    const val = document.getElementById('tue-select').value;
-    document.getElementById('div-tue-manual').className = (val === 'ar_cond') ? 'hidden' : '';
-    document.getElementById('div-tue-btu').className = (val === 'ar_cond') ? '' : 'hidden';
-    document.getElementById('div-tue-nome').className = (val === 'outro') ? '' : 'hidden';
+      const val = document.getElementById('tue-select').value;
+      document.getElementById('div-tue-manual').className = (val === 'ar_cond') ? 'hidden' : '';
+      document.getElementById('div-tue-btu').className = (val === 'ar_cond') ? '' : 'hidden';
+      document.getElementById('div-tue-nome').className = (val === 'outro') ? '' : 'hidden';
   }
 
   function togglePotenciaField() {
     const sel = document.getElementById('tipo-ponto');
-    const isSpecial = sel.options[sel.selectedIndex].dataset.isSwitch === "true" || sel.value === 'aterramento';
-    document.getElementById('container-potencia').className = isSpecial ? 'hidden' : '';
+    const opt = sel.options[sel.selectedIndex];
+    const potContainer = document.getElementById('container-potencia');
+    potContainer.className = (opt.dataset.isSwitch === "true" || opt.value === 'aterramento') ? 'hidden' : '';
   }
 
   function addItem() {
     const sel = document.getElementById('tipo-ponto');
     const opt = sel.options[sel.selectedIndex];
-    const qtd = parseInt(document.getElementById('ponto-qtd').value) || 0;
-    const pot = (opt.dataset.isSwitch !== "true" && opt.value !== 'aterramento') ? (parseInt(document.getElementById('ponto-pot').value) || 0) : 0;
+    const qtd = parseInt(document.getElementById('ponto-qtd').value);
+    let pot = (opt.dataset.isSwitch !== "true" && opt.value !== 'aterramento') ? (parseInt(document.getElementById('ponto-pot').value) || 0) : 0;
     
-    if(qtd > 0) {
-      itens.push({ id: Date.now(), desc: `${qtd}x ${opt.text}`, preco: parseFloat(opt.dataset.preco) * qtd, potencia: pot * qtd, categoria: opt.value === 'aterramento' ? 'ATERRAMENTO' : (opt.value.includes('luz') ? 'LUZ' : 'TUG'), qtd: qtd, tipo: opt.value });
-      atualizar();
-    }
+    if(qtd <= 0) return;
+
+    itens.push({
+      id: Date.now(),
+      desc: opt.value === 'aterramento' ? `Sistema de Aterramento (${qtd} Hastes)` : (pot > 0 ? `${qtd}x ${opt.text} (${pot}W)` : `${qtd}x ${opt.text}`),
+      categoria: opt.value === 'aterramento' ? 'ATERRAMENTO' : (opt.value.includes('luz') ? 'LUZ' : (opt.dataset.isSwitch === "true" ? 'INT' : 'TUG')),
+      preco: parseFloat(opt.dataset.preco) * qtd,
+      potencia: pot * qtd,
+      qtd: qtd,
+      tipo: opt.value,
+      isSwitch: opt.dataset.isSwitch === "true"
+    });
+    atualizar();
   }
 
   function addTUE() {
     const tipo = document.getElementById('tue-select').value;
     const dist = parseFloat(document.getElementById('tue-dist').value) || 0;
-    let pot = (tipo === 'ar_cond') ? TABELA_AR[document.getElementById('tue-btu').value].w : parseFloat(document.getElementById('tue-pot').value);
-    let nome = (tipo === 'ar_cond') ? `Ar Cond. ${document.getElementById('tue-btu').value} BTU` : (tipo === 'chuveiro' ? 'Chuveiro' : document.getElementById('tue-nome-custom').value);
+    let pot = 0;
+    let nome = "";
+    let subclass = "geral";
 
-    itens.push({ id: Date.now(), desc: `TUE: ${nome} (${pot}W)`, preco: 250, potencia: pot, categoria: 'TUE', subcategoria: tipo, distancia: dist, nomeTUE: nome, qtd: 1 });
+    if (tipo === 'chuveiro') {
+        pot = parseFloat(document.getElementById('tue-pot').value) || 5500;
+        nome = "Chuveiro Elétrico";
+        subclass = "chuveiro";
+    } else if (tipo === 'ar_cond') {
+        const btu = document.getElementById('tue-btu').value;
+        pot = TABELA_AR[btu].w;
+        nome = `Ar Condicionado ${btu} BTU`;
+        subclass = "ar";
+    } else {
+        pot = parseFloat(document.getElementById('tue-pot').value) || 0;
+        nome = document.getElementById('tue-nome-custom').value || "Equipamento Especial";
+        subclass = "geral";
+    }
+
+    if(pot <= 0) return;
+
+    itens.push({
+      id: Date.now(),
+      desc: `TUE: ${nome} (${pot}W) - Dist: ${dist}m`,
+      categoria: 'TUE',
+      subcategoria: subclass,
+      preco: 250,
+      potencia: pot,
+      qtd: 1,
+      tipo: 'tue',
+      distancia: dist,
+      nomeTUE: nome
+    });
     atualizar();
   }
 
@@ -172,54 +399,288 @@
     atualizar();
   }
 
+  function getFatorDemandaCoelba(potenciaWatts) {
+    const kW = potenciaWatts / 1000;
+    if (kW <= 1) return 0.86;
+    if (kW <= 2) return 0.75;
+    if (kW <= 3) return 0.66;
+    if (kW <= 4) return 0.59;
+    if (kW <= 5) return 0.52;
+    if (kW <= 6) return 0.45;
+    if (kW <= 7) return 0.40;
+    if (kW <= 8) return 0.35;
+    if (kW <= 9) return 0.31;
+    if (kW <= 10) return 0.27;
+    return 0.24;
+  }
+
+  function calcularDinamico() {
+    const tensao = parseInt(document.getElementById('tensao').value);
+    const padraoFases = parseInt(document.getElementById('padrao').value);
+    
+    let potLuz = itens.filter(i => i.categoria === 'LUZ' || (i.categoria === 'INT' && i.isSwitch)).reduce((acc, i) => acc + i.potencia, 0);
+    let potTug = itens.filter(i => i.categoria === 'TUG').reduce((acc, i) => acc + i.potencia, 0);
+    
+    let tues = itens.filter(i => i.categoria === 'TUE');
+    let numCircuTug = Math.ceil((potTug / (tensao > 220 ? 220 : tensao)) / 10) || 0;
+    let numCircuLuz = potLuz > 0 ? 1 : 0;
+    
+    let totalCircuitos = numCircuLuz + numCircuTug + tues.length;
+    let totalMontagem = (totalCircuitos * PRECO_MONTAGEM_CIRCUITO) + PRECO_DISJUNTOR_PADRAO;
+
+    const potBase = potLuz + potTug;
+    const fdBase = getFatorDemandaCoelba(potBase);
+    const demandaBase = potBase * fdBase;
+
+    const chuveiros = tues.filter(t => t.subcategoria === 'chuveiro');
+    const nChuveiros = chuveiros.length;
+    const fdChuveiro = nChuveiros > 0 ? (TABELA_FD_CHUVEIRO[Math.min(nChuveiros, 25) - 1] || 0.38) : 0;
+    const demandaChuveiro = chuveiros.reduce((acc, i) => acc + i.potencia, 0) * fdChuveiro;
+
+    const demandaAr = tues.filter(t => t.subcategoria === 'ar').reduce((acc, i) => acc + i.potencia, 0);
+    const demandaOutros = tues.filter(t => t.subcategoria === 'geral').reduce((acc, i) => acc + i.potencia, 0);
+
+    const demandaTotal = demandaBase + demandaChuveiro + demandaAr + demandaOutros;
+
+    let correnteDemanda = 0;
+    if (padraoFases === 1) {
+        correnteDemanda = demandaTotal / (tensao === 127 ? 127 : 220);
+    } else if (padraoFases === 2) {
+        correnteDemanda = demandaTotal / tensao; 
+    } else {
+        correnteDemanda = demandaTotal / (tensao * 1.732);
+    }
+
+    return { 
+      totalCircuitos, 
+      totalMontagem, 
+      instalada: potBase + tues.reduce((acc, i) => acc + i.potencia, 0), 
+      demanda: demandaTotal,
+      correnteDemanda: correnteDemanda
+    };
+  }
+
+  function getDisjuntorEntradaNorma(correnteDemanda, padrao) {
+    const escala = [10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125];
+    let dj = escala.find(d => d >= correnteDemanda) || 125;
+    if (correnteDemanda < 32) return 40; 
+    return dj;
+  }
+
+  function getBitolaEntradaNorma(correnteDisjuntor) {
+    if (correnteDisjuntor <= 24) return 2.5;
+    if (correnteDisjuntor <= 32) return 4;
+    if (correnteDisjuntor <= 41) return 6;
+    if (correnteDisjuntor <= 57) return 10;
+    if (correnteDisjuntor <= 76) return 16;
+    if (correnteDisjuntor <= 101) return 25;
+    if (correnteDisjuntor <= 125) return 35;
+    return 50;
+  }
+
   function atualizar() {
     const lista = document.getElementById('lista-itens');
+    const dDiv = document.getElementById('calculo-detalhes');
     lista.innerHTML = '';
-    let totalMO = 0;
-    
+    let totalMO_Itens = 0;
+
     itens.forEach(i => {
-      totalMO += i.preco;
+      totalMO_Itens += i.preco;
       lista.innerHTML += `<div class="item-list"><span>${i.desc}</span><span>R$ ${i.preco.toFixed(2)} <i class="fas fa-trash-alt btn-del" onclick="excluir(${i.id})"></i></span></div>`;
     });
 
-    const numCirc = Math.max(1, itens.filter(i => i.categoria === 'TUE').length + 2);
-    const montagem = (numCirc * PRECO_MONTAGEM_CIRCUITO) + PRECO_DISJUNTOR_PADRAO;
+    const c = calcularDinamico();
+    totalMO_Itens += c.totalMontagem;
+
+    dDiv.innerHTML = `
+      <b>Circuitos:</b> ${c.totalCircuitos} | 
+      <b>Montagem QDC + Padrão:</b> R$ ${c.totalMontagem.toFixed(2)}<br>
+      <b>Carga Instalada:</b> ${(c.instalada/1000).toFixed(2)} kW | 
+      <b>Demanda:</b> ${(c.demanda/1000).toFixed(2)} kW
+    `;
+    document.getElementById('valor-total').innerText = `R$ ${totalMO_Itens.toLocaleString('pt-BR')}`;
+  }
+
+  function getBitolaCircuito(corrente, dist = 0) {
+    let b = 2.5; 
+    if (corrente <= 24) b = 2.5;
+    else if (corrente <= 32) b = 4;
+    else if (corrente <= 41) b = 6;
+    else if (corrente <= 57) b = 10;
     
-    document.getElementById('calculo-detalhes').innerHTML = `Circuitos: ${numCirc} | Montagem QDC: R$ ${montagem.toFixed(2)}`;
-    document.getElementById('valor-total').innerText = `R$ ${(totalMO + montagem).toLocaleString('pt-BR')}`;
+    if (dist > 25) {
+      const bitolas = [2.5, 4, 6, 10, 16, 25, 35, 50];
+      let idx = bitolas.indexOf(b);
+      if (idx < bitolas.length - 1) b = bitolas[idx + 1];
+    }
+    return b;
+  }
+
+  function getDisjuntorCircuito(corrente, subcategoria = 'geral') {
+    const escala = [10, 16, 20, 25, 32, 40, 50, 63, 70, 80];
+    let calculado = escala.find(x => x >= corrente) || 100;
+    if (subcategoria === 'ar') return calculado < 16 ? 16 : calculado; 
+    if (subcategoria === 'chuveiro') return calculado < 25 ? 32 : calculado; 
+    return calculado;
   }
 
   async function gerarPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const cliente = document.getElementById('orc-cliente').value || "Cliente";
+    const validade = document.getElementById('orc-validade').value || "5";
+    const V = parseInt(document.getElementById('tensao').value);
+    const P = parseInt(document.getElementById('padrao').value);
+    const distGeral = parseFloat(document.getElementById('dist-geral').value) || 0;
+    const c = calcularDinamico();
+    const dataAtual = new Date().toLocaleDateString('pt-BR');
     
-    // Página 1: Capa e Mão de Obra
+    let totalModulosDIN = 0;
+
     doc.setFontSize(16); doc.setTextColor(10, 124, 255);
-    doc.text("ORÇAMENTO TÉCNICO - RD ENGENHARIA", 105, 20, { align: "center" });
+    doc.text("ORÇAMENTO TÉCNICO RD ENGENHARIA", 105, 20, { align: "center" });
     
     doc.setFontSize(10); doc.setTextColor(0);
     doc.text(`Cliente: ${cliente}`, 20, 35);
-    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 20, 40);
+    doc.text(`Data: ${dataAtual} | Validade: ${validade} dias`, 20, 40);
+    doc.text(`Tensão: ${V}V | Padrão: ${P}F | Dist. Entrada: ${distGeral}m`, 20, 45);
 
-    const bodyMO = itens.map(i => [i.desc, `R$ ${i.preco.toFixed(2)}`]);
-    doc.autoTable({ startY: 50, head: [['Serviço', 'Preço']], body: bodyMO, headStyles: { fillColor: [10, 124, 255] } });
+    let totalMO_Base = itens.reduce((acc, i) => acc + i.preco, 0);
+    const valorFinal = totalMO_Base + c.totalMontagem;
+    
+    doc.autoTable({
+      startY: 55,
+      head: [['Descrição do Serviço']],
+      body: [
+        ...itens.map(i => [i.desc]),
+        [`Instalação de Proteção do Padrão de Entrada`],
+        [`Montagem de Quadro de Distribuição (${c.totalCircuitos} circuitos)`],
+        [{content: `VALOR TOTAL DA MÃO DE OBRA: R$ ${valorFinal.toLocaleString('pt-BR')}`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] }}]
+      ],
+      headStyles: { fillColor: [10, 124, 255] }
+    });
 
-    // Página 2: Materiais (Simplificado para o exemplo)
+    const cabosMap = {};
+    const dispositivos = [];
+    const addCabo = (bitola, cor, metros) => {
+      const key = `${bitola}mm²_${cor}`;
+      cabosMap[key] = (cabosMap[key] || 0) + metros;
+    };
+
+    const djEntrada = getDisjuntorEntradaNorma(c.correnteDemanda, P);
+    const bitolaEntrada = getBitolaEntradaNorma(djEntrada);
+    
+    addCabo(bitolaEntrada, "PRETO (Fase Entrada)", distGeral * P);
+    addCabo(bitolaEntrada, "AZUL (Neutro Entrada)", distGeral);
+    addCabo(bitolaEntrada, "VERDE (Terra Entrada)", distGeral);
+
+    const determinarPolosCircuito = (tensaoAlvo) => {
+      if (P === 1) return "1P";
+      if (tensaoAlvo === 220 && (P === 2 || P === 3)) return "2P";
+      return "1P";
+    };
+
+    const luzes = itens.filter(i => i.categoria === 'LUZ' || (i.categoria === 'INT' && i.isSwitch));
+    if(luzes.length > 0) {
+      const potL = luzes.reduce((acc, i) => acc + i.potencia, 0);
+      const dj = getDisjuntorCircuito(Math.max(potL / (V > 220 ? 220 : V), 10));
+      const polosLuz = determinarPolosCircuito(V);
+      const nPolos = parseInt(polosLuz);
+      
+      addCabo(1.5, "PRETO", luzes.length * 10 * nPolos);
+      if(nPolos === 1) addCabo(1.5, "AZUL", luzes.length * 10);
+      
+      dispositivos.push([`Disjuntor DIN ${polosLuz} ${dj}A`, "1 un", "Circuito 01: Iluminação"]);
+      totalModulosDIN += nPolos;
+    }
+
+    const tugs = itens.filter(i => i.categoria === 'TUG');
+    if(tugs.length > 0) {
+      const potTug = tugs.reduce((acc, i) => acc + i.potencia, 0);
+      const vTug = V > 220 ? 220 : V;
+      const numCircuTug = Math.ceil((potTug / vTug) / 10) || 1;
+      const metrosPerCirc = (tugs.reduce((acc, i) => acc + i.qtd, 0) * 8) / numCircuTug;
+      const polosTug = determinarPolosCircuito(V);
+      const nPolos = parseInt(polosTug);
+
+      for(let n=1; n<=numCircuTug; n++) {
+        addCabo(2.5, "PRETO", metrosPerCirc * nPolos);
+        if(nPolos === 1) addCabo(2.5, "AZUL", metrosPerCirc);
+        addCabo(2.5, "VERDE", metrosPerCirc);
+        dispositivos.push([`Disjuntor DIN ${polosTug} 20A`, "1 un", `Circuito TUG ${n}`]);
+        totalModulosDIN += nPolos;
+      }
+    }
+
+    itens.filter(i => i.categoria === 'TUE').forEach(t => {
+      let vOp = V; 
+      let polos = determinarPolosCircuito(V);
+      if (V === 380) { vOp = 220; polos = "1P"; } 
+      const I = t.potencia / vOp;
+      const b = getBitolaCircuito(I, t.distancia);
+      const dj = getDisjuntorCircuito(I, t.subcategoria);
+      const nPolos = parseInt(polos);
+      addCabo(b, "PRETO", t.distancia * nPolos);
+      if(nPolos === 1) addCabo(b, "AZUL", t.distancia);
+      addCabo(b, "VERDE", t.distancia);
+      dispositivos.push([`Disjuntor DIN ${polos} ${dj}A`, "1 un", `TUE: ${t.nomeTUE}`]);
+      totalModulosDIN += nPolos;
+    });
+
+    const itemAterramento = itens.find(i => i.categoria === 'ATERRAMENTO');
+    if(itemAterramento) {
+      const nHastes = itemAterramento.qtd;
+      dispositivos.push([`Haste Aterramento 5/8" x 2,40m`, `${nHastes} un`, "Malha de Aterramento"]);
+      dispositivos.push([`Conector Tipo GTDU 5/8"`, `${nHastes} un`, "Malha de Aterramento"]);
+      dispositivos.push([`Caixa de Inspeção de Aterramento`, `${nHastes} un`, "Malha de Aterramento"]);
+    }
+
+    dispositivos.push([`Disjuntor NEMA/DIN ${P}P ${djEntrada}A`, "1 un", "Proteção Padrão Entrada"]);
+    dispositivos.push([`Disjuntor Geral DIN ${P}P ${djEntrada}A`, "1 un", "Quadro de Distribuição"]);
+    totalModulosDIN += P;
+
+    const polosIDR = (P === 1) ? 2 : 4;
+    dispositivos.push([`IDR ${polosIDR}P ${djEntrada}A / 30mA`, "1 un", "Quadro de Distribuição"]);
+    totalModulosDIN += polosIDR;
+
+    const qtdDPS = P + 1;
+    dispositivos.push([`DPS 275V 20kA/40kA`, `${qtdDPS} un`, "Quadro de Distribuição"]);
+    totalModulosDIN += qtdDPS;
+
+    const espacoComReserva = Math.ceil(totalModulosDIN * 1.2);
+    let tamanhoQuadro = 12;
+    const tamanhosComerciais = [12, 18, 24, 36, 48, 54, 72];
+    tamanhoQuadro = tamanhosComerciais.find(t => t >= espacoComReserva) || "Especial";
+
+    dispositivos.push([`Quadro de Distribuição p/ ${tamanhoQuadro} Disjuntores DIN`, "1 un", `Capacidade: ${totalModulosDIN} pólos usados + reserva`]);
+    dispositivos.push([`Barramento de Neutro e Terra`, "1 un", "Quadro de Distribuição"]);
+    dispositivos.push([`Barramento Pente ${P}F`, "1 un", "Quadro de Distribuição"]);
+
+    const materialTabela = Object.keys(cabosMap).map(k => [k.split('_')[1], k.split('_')[0], `${Math.ceil(cabosMap[k])}m`]);
+
     doc.addPage();
-    doc.text("LISTA DE MATERIAIS SUGERIDA (NBR 5410)", 20, 20);
+    doc.setFontSize(12); doc.setTextColor(0);
+    doc.text("MEMORIAL DE MATERIAIS E ESPECIFICAÇÕES TÉCNICAS", 20, 20);
     
-    const materiais = [
-      ["Cabo Flexível 2,5mm²", "Preto", "50m"],
-      ["Cabo Flexível 2,5mm²", "Azul", "30m"],
-      ["Disjuntor DIN 20A", "Unipolar", "2 un"],
-      ["IDR 30mA", "Geral", "1 un"]
-    ];
-    
-    doc.autoTable({ startY: 30, head: [['Item', 'Tipo', 'Qtd']], body: materiais, headStyles: { fillColor: [37, 211, 102] } });
+    doc.autoTable({
+      startY: 30,
+      head: [['Local/Circuito', 'Dispositivo/Cabo', 'Quantidade']],
+      body: [...dispositivos.map(d => [d[2], d[0], d[1]]), ...materialTabela.map(m => [`Cabo Flexível ${m[0]}`, m[1], m[2]])],
+      headStyles: { fillColor: [37, 211, 102] }
+    });
 
+    const finalY = doc.lastAutoTable.finalY + 15;
+    doc.setFontSize(9); doc.setTextColor(100);
+    doc.text(`Espaço total ocupado: ${totalModulosDIN} módulos DIN. Quadro dimensionado para ${tamanhoQuadro} módulos (Reserva NBR 5410 inclusa).`, 20, finalY);
+    doc.text(`RD ENGENHARIA ELÉTRICA | CNPJ: ${CNPJ_RD}`, 105, finalY + 10, { align: "center" });
     doc.save(`Orcamento_RD_${cliente}.pdf`);
   }
 </script>
 </body>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(() => console.log("Pronto.")).catch(err => console.log(err));
+  }
+</script>
+<link rel="manifest" href="manifest.json">
 </html>
