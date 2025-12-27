@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RD Engenharia | Sistema de Engenharia</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" integrity="sha512-Avb2QiuDEEvB4bZJYdft2mNjVShBftLdPG8FJ0V7irTLQ8UoGpjkgcktgvrTES3Eciy75abYU1TTLQj0CweJTw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script>
+    window.tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0a7cff',
+            secondary: '#25d366',
+            danger: '#e74c3c',
+            bg: '#f2f6fa',
+            text: '#333',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    /* Simple animation for view transitions */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+    @keyframes shake {
+      10%, 90% { transform: translate3d(-1px, 0, 0); }
+      20%, 80% { transform: translate3d(2px, 0, 0); }
+      30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+      40%, 60% { transform: translate3d(4px, 0, 0); }
+    }
+    .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+     @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin { animation: spin 1s linear infinite; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "jspdf": "https://esm.sh/jspdf@2.5.1",
+      "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.8.2",
+      "@google/genai": "https://esm.sh/@google/genai"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import React, { useState, useCallback, useEffect, useMemo, useContext, createContext } from 'react';
+    import ReactDOM from 'react-dom/client';
+    import jsPDF from 'jspdf';
+    import autoTable from 'jspdf-autotable';
+    import { GoogleGenAI, Type } from '@google/genai';
+
+    // --- From constants.ts ---
+    const DEFAULT_SERVICE_PRICES = {
+      luminaria_embutir: 45,
+      luminaria_sobrepor: 35,
+      chuveiro: 90,
+      motor_monofasico: 280,
+      motor_trifasico: 350,
+      tug: 45,
+      tug_dupla: 65,
+      int_simples: 35,
+      int_duplo: 55,
+      three_way: 60,
+      aterramento: 200,
+      tue: 250,
+      montagem_circuito: 150.00,
+      disjuntor_padrao: 80.00,
+    };
+    const DEFAULT_COMPANY_INFO = {
+        name: 'RD ENGENHARIA ELÉTRICA',
+        cnpj: '44.367.932/0001-42',
+        logo: null,
+        apiKey: '',
+        pdfNotes: 'Este orçamento refere-se exclusivamente à mão de obra, não incluindo materiais.\nValidade da proposta: 5 dias.\nGarantia do serviço: 90 dias.'
+    };
+    const TABELA_AR = {
+        7500:  { w: 900 }, 9000:  { w: 1300 }, 10000: { w: 1400 }, 12000: { w: 1600 },
+        15000: { w: 1900 }, 18000: { w: 2600 }, 21000: { w: 2800 }, 30000: { w: 3800 },
+        41000: { w: 5000 }, 60000: { w: 7500 }
+    };
+    const TABELA_FD_CHUVEIRO = [1.0, 1.0, 0.84, 0.76, 0.70, 0.65, 0.60, 0.57, 0.54, 0.52, 0.49, 0.48, 0.46, 0.45, 0.44, 0.43, 0.42, 0.41, 0.40, 0.40, 0.39, 0.39, 0.39, 0.38, 0.38];
+    const PONTO_OPTIONS = [
+      { value: 'luminaria_embutir', label: 'Luminária de Embutir', isSwitch: false },
+      { value: 'luminaria_sobrepor', label: 'Luminária de Sobrepor', isSwitch: false },
+      { value: 'tug', label: 'Tomada Simples (TUG)', isSwitch: false },
+      { value: 'tug_dupla', label: 'Tomada Dupla (TUG)', isSwitch: false },
+      { value: 'int_simples', label: 'Interruptor Simples', isSwitch: true },
+      { value: 'int_duplo', label: 'Interruptor Duplo', isSwitch: true },
+      { value: 'three_way', label: 'Three-Way (Paralelo)', isSwitch: true },
+      { value: 'aterramento', label: 'Aterramento (Quantidade de Hastes)', isSwitch: false },
+    ];
+    const priceLabels = {
+      luminaria_embutir: "Luminária de Embutir", luminaria_sobrepor: "Luminária de Sobrepor",
+      chuveiro: "Ponto Chuveiro Elétrico", motor_monofasico: "Instalação Motor Monofásico",
+      motor_trifasico: "Instalação Motor Trifásico", tug: "Tomada Simples (TUG)",
+      tug_dupla: "Tomada Dupla (TUG)", int_simples: "Interruptor Simples",
+      int_duplo: "Interruptor Duplo", three_way: "Three-Way (Paralelo)",
+      aterramento: "Aterramento (por Haste)", tue: "Ponto de Carga Especial (Outro)",
+      montagem_circuito: "Montagem de Circuito (QDC)", disjuntor_padrao: "Instalação Disjuntor Padrão",
+    };
+
+    // --- From services/calculationService.ts ---
+    function getFatorDemandaCoelba(potenciaWatts) {
+      const kW = potenciaWatts / 1000;
+      if (kW <= 1) return 0.86; if (kW <= 2) return 0.75; if (kW <= 3) return 0.66;
+      if (kW <= 4) return 0.59; if (kW <= 5) return 0.52; if (kW <= 6) return 0.45;
+      if (kW <= 7) return 0.40; if (kW <= 8) return 0.35; if (kW <= 9) return 0.31;
+      if (kW <= 10) return 0.27; return 0.24;
+    }
+    function calculateDynamicValues(items, tensao, padraoFases, prices) {
+      const potLuz = items.filter(i => i.categoria === 'LUZ' || (i.categoria === 'INT' && i.isSwitch)).reduce((acc, i) => acc + i.potencia, 0);
+      const potTug = items.filter(i => i.categoria === 'TUG').reduce((acc, i) => acc + i.potencia, 0);
+      const tues = items.filter(i => i.categoria === 'TUE');
+      const numCircuTug = Math.ceil((potTug / (tensao > 220 ? 220 : tensao)) / 10) || 0;
+      const numCircuLuz = potLuz > 0 ? 1 : 0;
+      const totalCircuitos = numCircuLuz + numCircuTug + tues.length;
+      const totalMontagem = (totalCircuitos * prices.montagem_circuito) + prices.disjuntor_padrao;
+      const potBase = potLuz + potTug;
+      const fdBase = getFatorDemandaCoelba(potBase);
+      const demandaBase = potBase * fdBase;
+      const chuveiros = tues.filter(t => t.subcategoria === 'chuveiro');
+      const nChuveiros = chuveiros.length;
+      const fdChuveiro = nChuveiros > 0 ? (TABELA_FD_CHUVEIRO[Math.min(nChuveiros, 25) - 1] || 0.38) : 0;
+      const demandaChuveiro = chuveiros.reduce((acc, i) => acc + i.potencia, 0) * fdChuveiro;
+      const demandaAr = tues.filter(t => t.subcategoria === 'ar').reduce((acc, i) => acc + i.potencia, 0);
+      const demandaOutros = tues.filter(t => t.subcategoria === 'geral').reduce((acc, i) => acc + i.potencia, 0);
+      const motores = tues.filter(t => t.subcategoria?.startsWith('motor')).sort((a, b) => b.potencia - a.potencia);
+      let demandaMotores = 0;
+      const fatoresDemandaMotor = [1.0, 0.75, 0.65, 0.55, 0.50, 0.45, 0.40];
+      motores.forEach((motor, index) => {
+        const fator = fatoresDemandaMotor[index] || 0.40;
+        demandaMotores += motor.potencia * fator;
+      });
+      const demandaTotal = demandaBase + demandaChuveiro + demandaAr + demandaOutros + demandaMotores;
+      let correnteDemanda = 0;
+      if (padraoFases === 1) {
+          correnteDemanda = demandaTotal / (tensao === 127 ? 127 : 220);
+      } else if (padraoFases === 2) {
+          correnteDemanda = demandaTotal / 220; 
+      } else {
+          correnteDemanda = demandaTotal / (tensao * 1.732);
+      }
+      return { totalCircuitos, totalMontagem, instalada: potBase + tues.reduce((acc, i) => acc + i.potencia, 0), demanda: demandaTotal, correnteDemanda };
+    }
+
+    // --- From services/pdfService.ts ---
+    function getDisjuntorEntradaNorma(correnteDemanda) {
+      const escala = [10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125];
+      let dj = escala.find(d => d >= correnteDemanda) || 125;
+      if (correnteDemanda < 32) return 40; 
+      return dj;
+    }
+    function getBitolaEntradaNorma(correnteDisjuntor) {
+      if (correnteDisjuntor <= 24) return 2.5; if (correnteDisjuntor <= 32) return 4;
+      if (correnteDisjuntor <= 41) return 6; if (correnteDisjuntor <= 57) return 10;
+      if (correnteDisjuntor <= 76) return 16; if (correnteDisjuntor <= 101) return 25;
+      if (correnteDisjuntor <= 125) return 35; return 50;
+    }
+    function getBitolaCircuito(corrente, dist = 0) {
+      let b = 2.5; 
+      if (corrente <= 24) b = 2.5; else if (corrente <= 32) b = 4;
+      else if (corrente <= 41) b = 6; else if (corrente <= 57) b = 10;
+      if (dist > 25) {
+        const bitolas = [2.5, 4, 6, 10, 16, 25, 35, 50];
+        let idx = bitolas.indexOf(b);
+        if (idx < bitolas.length - 1) b = bitolas[idx + 1];
+      }
+      return b;
+    }
+    function getDisjuntorCircuito(corrente, subcategoria = 'geral') {
+      const escala = [10, 16, 20, 25, 32, 40, 50, 63, 70, 80];
+      let calculado = escala.find(x => x >= corrente) || 100;
+      if (subcategoria === 'ar') return calculado < 16 ? 16 : calculado; 
+      if (subcategoria === 'chuveiro') return calculado < 25 ? 32 : calculado; 
+      return calculado;
+    }
+    
+    function addPdfFooter(doc, companyInfo, cliente) {
+        const pageCount = doc.internal.getNumberOfPages();
+        const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : doc.internal.pageSize.height - 80;
+
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+
+        let currentY = finalY + 15;
+        if (currentY > doc.internal.pageSize.height - 60) {
+            doc.addPage();
+            currentY = 20;
+        }
+
+        if (companyInfo.pdfNotes) {
+            doc.setFontSize(10);
+            doc.setTextColor(0);
+            doc.text("Observações e Termos:", 20, currentY);
+            currentY += 5;
+            doc.setFontSize(8);
+            doc.setTextColor(100);
+            const notes = doc.splitTextToSize(companyInfo.pdfNotes, 170);
+            doc.text(notes, 20, currentY);
+            currentY += (notes.length * 4) + 10;
+        }
+
+        if (currentY > doc.internal.pageSize.height - 50) {
+            doc.addPage();
+            currentY = 20;
+        }
+
+        const signatureY = doc.internal.pageSize.height - 35;
+        const signatureXCompany = 45;
+        const signatureXClient = 165;
+        doc.line(signatureXCompany - 25, signatureY, signatureXCompany + 25, signatureY);
+        doc.text(companyInfo.name, signatureXCompany, signatureY + 5, { align: 'center' });
+        doc.text("Responsável Técnico", signatureXCompany, signatureY + 9, { align: 'center' });
+
+        doc.line(signatureXClient - 25, signatureY, signatureXClient + 25, signatureY);
+        doc.text(cliente || "Cliente", signatureXClient, signatureY + 5, { align: 'center' });
+        doc.text("Ciente e de Acordo", signatureXClient, signatureY + 9, { align: 'center' });
+    }
+
+    function generateTechnicalPdf(data) {
+      const { cliente, validade, tensao, padrao, distGeral, items, calculation, companyInfo } = data;
+      const doc = new jsPDF();
+      const dataAtual = new Date().toLocaleDateString('pt-BR');
+      let startY = 20;
+
+      if (companyInfo.logo) {
+          try {
+              const img = new Image();
+              img.src = companyInfo.logo;
+              const aspectRatio = img.width / img.height;
+              const logoHeight = 15;
+              const logoWidth = logoHeight * aspectRatio;
+              const xPos = (210 - logoWidth) / 2;
+              doc.addImage(companyInfo.logo, 'PNG', xPos, 15, logoWidth, logoHeight);
+              startY = 40;
+          } catch(e) { console.error("Error adding logo to PDF", e); }
+      }
+
+      doc.setFontSize(16); doc.setTextColor(10, 124, 255);
+      doc.text(`ORÇAMENTO TÉCNICO | ${companyInfo.name}`, 105, startY, { align: "center" });
+      startY += 15;
+      
+      doc.setFontSize(10); doc.setTextColor(0);
+      doc.text(`Cliente: ${cliente || 'Não informado'}`, 20, startY);
+      doc.text(`Data: ${dataAtual} | Validade: ${validade} dias`, 20, startY + 5);
+      doc.text(`Tensão: ${tensao}V | Padrão: ${padrao}F | Dist. Entrada: ${distGeral}m`, 20, startY + 10);
+      const totalMO_Base = items.reduce((acc, i) => acc + i.preco, 0);
+      const valorFinal = totalMO_Base + calculation.totalMontagem;
+      autoTable(doc, {
+        startY: startY + 20,
+        head: [['Descrição do Serviço']],
+        body: [
+          ...items.map(i => [i.desc]),
+          [`Instalação de Proteção do Padrão de Entrada`],
+          [`Montagem de Quadro de Distribuição (${calculation.totalCircuitos} circuitos)`],
+          [{content: `VALOR TOTAL DA MÃO DE OBRA: R$ ${valorFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] }}]
+        ],
+        headStyles: { fillColor: [10, 124, 255] }
+      });
+      const cabosMap = {};
+      const dispositivos = [];
+      const addCabo = (bitola, cor, metros) => {
+        const key = `${bitola}mm²_${cor}`;
+        cabosMap[key] = (cabosMap[key] || 0) + metros;
+      };
+      const djEntrada = getDisjuntorEntradaNorma(calculation.correnteDemanda);
+      const bitolaEntrada = getBitolaEntradaNorma(djEntrada);
+      addCabo(bitolaEntrada, "PRETO (Fase Entrada)", distGeral * padrao);
+      addCabo(bitolaEntrada, "AZUL (Neutro Entrada)", distGeral);
+      addCabo(bitolaEntrada, "VERDE (Terra Entrada)", distGeral);
+      const determinarPolosCircuito = (tensaoAlvo) => {
+        if (padrao === 1) return "1P";
+        if (tensaoAlvo === 220 && (padrao === 2 || padrao === 3)) return "2P";
+        return "1P";
+      };
+      const luzes = items.filter(i => i.categoria === 'LUZ' || (i.categoria === 'INT' && i.isSwitch));
+      let totalModulosDIN = 0;
+      if(luzes.length > 0) {
+        const potL = luzes.reduce((acc, i) => acc + i.potencia, 0);
+        const dj = getDisjuntorCircuito(Math.max(potL / (tensao > 220 ? 220 : tensao), 10));
+        const polosLuz = determinarPolosCircuito(tensao);
+        const nPolos = parseInt(polosLuz, 10);
+        addCabo(1.5, "PRETO", luzes.length * 10 * nPolos);
+        if(nPolos === 1) addCabo(1.5, "AZUL", luzes.length * 10);
+        dispositivos.push([`Disjuntor DIN ${polosLuz} ${dj}A`, "1 un", "Circuito 01: Iluminação"]);
+        totalModulosDIN += nPolos;
+      }
+      const tugs = items.filter(i => i.categoria === 'TUG');
+      if(tugs.length > 0) {
+        const potTug = tugs.reduce((acc, i) => acc + i.potencia, 0);
+        const vTug = tensao > 220 ? 220 : tensao;
+        const numCircuTug = Math.ceil((potTug / vTug) / 10) || 1;
+        const metrosPerCirc = (tugs.reduce((acc, i) => acc + i.qtd, 0) * 8) / numCircuTug;
+        const polosTug = determinarPolosCircuito(tensao);
+        const nPolos = parseInt(polosTug, 10);
+        for(let n=1; n<=numCircuTug; n++) {
+          addCabo(2.5, "PRETO", metrosPerCirc * nPolos);
+          if(nPolos === 1) addCabo(2.5, "AZUL", metrosPerCirc);
+          addCabo(2.5, "VERDE", metrosPerCirc);
+          dispositivos.push([`Disjuntor DIN ${polosTug} 20A`, "1 un", `Circuito TUG ${n}`]);
+          totalModulosDIN += nPolos;
+        }
+      }
+      items.filter(i => i.categoria === 'TUE').forEach(t => {
+        const FATOR_POTENCIA = 0.80; const RENDIMENTO = 0.85;
+        if (t.subcategoria === 'motor_trifasico') {
+          const I_nominal = t.potencia / (tensao * 1.732 * FATOR_POTENCIA * RENDIMENTO);
+          const correnteCalculo = I_nominal * 1.25;
+          const polos = "3P"; const nPolos = 3;
+          const dj = getDisjuntorCircuito(correnteCalculo);
+          const b = getBitolaCircuito(correnteCalculo, t.distancia);
+          addCabo(b, "PRETO (Fases)", (t.distancia || 0) * nPolos);
+          addCabo(b, "VERDE (Terra)", (t.distancia || 0));
+          dispositivos.push([`Disjuntor DIN ${polos} ${dj}A (Curva C)`, "1 un", `TUE: ${t.nomeTUE}`]);
+          totalModulosDIN += nPolos; return;
+        }
+        if (t.subcategoria === 'motor_monofasico') {
+          const vMotor = (padrao > 1 && tensao === 127) ? 220 : tensao;
+          const I_nominal = t.potencia / (vMotor * FATOR_POTENCIA * RENDIMENTO);
+          const correnteCalculo = I_nominal * 1.25;
+          const polos = determinarPolosCircuito(vMotor);
+          const nPolos = parseInt(polos, 10);
+          const dj = getDisjuntorCircuito(correnteCalculo);
+          const b = getBitolaCircuito(correnteCalculo, t.distancia);
+          addCabo(b, "PRETO (Fase)", (t.distancia || 0) * nPolos);
+          if(nPolos === 1) addCabo(b, "AZUL (Neutro)", (t.distancia || 0));
+          addCabo(b, "VERDE (Terra)", (t.distancia || 0));
+          dispositivos.push([`Disjuntor DIN ${polos} ${dj}A (Curva C)`, "1 un", `TUE: ${t.nomeTUE}`]);
+          totalModulosDIN += nPolos; return;
+        }
+        let vOp = tensao; let polos = determinarPolosCircuito(tensao);
+        if (tensao === 380) { vOp = 220; polos = "1P"; }
+        const I = t.potencia / vOp;
+        const b = getBitolaCircuito(I, t.distancia);
+        const dj = getDisjuntorCircuito(I, t.subcategoria);
+        const nPolos = parseInt(polos, 10);
+        addCabo(b, "PRETO", (t.distancia || 0) * nPolos);
+        if(nPolos === 1) addCabo(b, "AZUL", (t.distancia || 0));
+        addCabo(b, "VERDE", (t.distancia || 0));
+        dispositivos.push([`Disjuntor DIN ${polos} ${dj}A`, "1 un", `TUE: ${t.nomeTUE}`]);
+        totalModulosDIN += nPolos;
+      });
+      const itemAterramento = items.find(i => i.categoria === 'ATERRAMENTO');
+      if(itemAterramento) {
+        const nHastes = itemAterramento.qtd;
+        dispositivos.push([`Haste Aterramento 5/8" x 2,40m`, `${nHastes} un`, "Malha de Aterramento"]);
+        dispositivos.push([`Conector Tipo GTDU 5/8"`, `${nHastes} un`, "Malha de Aterramento"]);
+        dispositivos.push([`Caixa de Inspeção de Aterramento`, `${nHastes} un`, "Malha de Aterramento"]);
+      }
+      dispositivos.push([`Disjuntor NEMA/DIN ${padrao}P ${djEntrada}A`, "1 un", "Proteção Padrão Entrada"]);
+      dispositivos.push([`Disjuntor Geral DIN ${padrao}P ${djEntrada}A`, "1 un", "Quadro de Distribuição"]);
+      totalModulosDIN += padrao;
+      const polosIDR = (padrao === 1) ? 2 : 4;
+      dispositivos.push([`IDR ${polosIDR}P ${djEntrada}A / 30mA`, "1 un", "Quadro de Distribuição"]);
+      totalModulosDIN += polosIDR;
+      const qtdDPS = padrao + 1;
+      dispositivos.push([`DPS 275V 20kA/40kA`, `${qtdDPS} un`, "Quadro de Distribuição"]);
+      totalModulosDIN += qtdDPS;
+      const espacoComReserva = Math.ceil(totalModulosDIN * 1.2);
+      const tamanhosComerciais = [12, 18, 24, 36, 48, 54, 72];
+      const tamanhoQuadro = tamanhosComerciais.find(t => t >= espacoComReserva) || "Especial";
+      dispositivos.push([`Quadro de Distribuição p/ ${tamanhoQuadro} Disjuntor DIN`, "1 un", `Capacidade: ${totalModulosDIN} pólos usados + reserva`]);
+      dispositivos.push([`Barramento de Neutro e Terra`, "1 un", "Quadro de Distribuição"]);
+      dispositivos.push([`Barramento Pente ${padrao}F`, "1 un", "Quadro de Distribuição"]);
+      const materialTabela = Object.keys(cabosMap).map(k => {
+        const [bitola, cor] = k.split('_');
+        return [`Cabo Flexível ${cor}`, bitola, `${Math.ceil(cabosMap[k])}m`];
+      });
+      doc.addPage();
+      doc.setFontSize(12); doc.setTextColor(0);
+      doc.text("MEMORIAL DE MATERIAIS E ESPECIFICAÇÕES TÉCNICAS", 20, 20);
+      autoTable(doc, {
+        startY: 30,
+        head: [['Local/Circuito', 'Dispositivo/Cabo', 'Quantidade']],
+        body: [...dispositivos.map(d => [d[2], d[0], d[1]]), ...materialTabela],
+        headStyles: { fillColor: [37, 211, 102] }
+      });
+      
+      const finalYMemo = doc.lastAutoTable.finalY + 15;
+      doc.setFontSize(9); doc.setTextColor(100);
+      doc.text(`Espaço total ocupado: ${totalModulosDIN} módulos DIN. Quadro dimensionado para ${tamanhoQuadro} módulos (Reserva NBR 5410 inclusa).`, 20, finalYMemo);
+      doc.text(`${companyInfo.name} | CNPJ: ${companyInfo.cnpj}`, 105, finalYMemo + 5, { align: "center" });
+      
+      addPdfFooter(doc, companyInfo, cliente);
+      doc.save(`Orcamento_Tecnico_${companyInfo.name.replace(/ /g,"_")}_${cliente || 'Cliente'}.pdf`);
+    }
+
+    function generateSimplePdf(data) {
+        const { cliente, validade, items, companyInfo } = data;
+        const doc = new jsPDF();
+        const dataAtual = new Date().toLocaleDateString('pt-BR');
+        let startY = 20;
+
+        if (companyInfo.logo) {
+            try {
+                const img = new Image();
+                img.src = companyInfo.logo;
+                const aspectRatio = img.width / img.height;
+                const logoHeight = 15;
+                const logoWidth = logoHeight * aspectRatio;
+                const xPos = (210 - logoWidth) / 2;
+                doc.addImage(companyInfo.logo, 'PNG', xPos, 15, logoWidth, logoHeight);
+                startY = 40;
+            } catch(e) { console.error("Error adding logo to PDF", e); }
+        }
+        
+        doc.setFontSize(16);
+        doc.setTextColor(10, 124, 255);
+        doc.text(`ORÇAMENTO RÁPIDO | ${companyInfo.name}`, 105, startY, { align: "center" });
+        startY += 15;
+        
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        doc.text(`Cliente: ${cliente || 'Não informado'}`, 20, startY);
+        doc.text(`Data: ${dataAtual} | Validade: ${validade} dias`, 20, startY + 5);
+
+        const total = items.reduce((acc, item) => acc + item.totalPrice, 0);
+
+        autoTable(doc, {
+            startY: startY + 20,
+            head: [['Descrição do Serviço', 'Qtd.', 'Vlr. Unit.', 'Vlr. Total']],
+            body: items.map(item => [
+                item.desc,
+                item.qtd,
+                `R$ ${item.unitPrice.toFixed(2)}`,
+                `R$ ${item.totalPrice.toFixed(2)}`
+            ]),
+            foot: [[
+                { content: 'VALOR TOTAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+                { content: `R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, styles: { fontStyle: 'bold' } }
+            ]],
+            headStyles: { fillColor: [10, 124, 255] },
+            footStyles: { fillColor: [240, 240, 240], textColor: 0 }
+        });
+
+        addPdfFooter(doc, companyInfo, cliente);
+        doc.save(`Orcamento_Rapido_${companyInfo.name.replace(/ /g,"_")}_${cliente || 'Cliente'}.pdf`);
+    }
+    
+    // --- Theme Context and Provider ---
+    const ThemeContext = createContext();
+
+    const ThemeProvider = ({ children }) => {
+      const [theme, setTheme] = useState(() => {
+        try {
+            return localStorage.getItem('rd-theme') || 'light';
+        } catch (e) {
+            return 'light';
+        }
+      });
+
+      useEffect(() => {
+        const root = window.document.documentElement;
+        if (theme === 'dark') {
+          root.classList.add('dark');
+        } else {
+          root.classList.remove('dark');
+        }
+        try {
+            localStorage.setItem('rd-theme', theme);
+        } catch (e) {
+            console.error("Could not access localStorage to save theme preference:", e);
+        }
+      }, [theme]);
+
+      const toggleTheme = () => {
+        setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+      };
+
+      return React.createElement(ThemeContext.Provider, { value: { theme, toggleTheme } }, children);
+    };
+    
+    const DarkModeToggle = () => {
+        const { theme, toggleTheme } = useContext(ThemeContext);
+        
+        return React.createElement('button', {
+            onClick: toggleTheme,
+            className: 'fixed bottom-5 right-5 w-14 h-14 bg-white dark:bg-slate-700 rounded-full shadow-lg flex items-center justify-center text-2xl text-yellow-500 dark:text-yellow-300 transition-transform duration-300 hover:scale-110 z-50'
+        }, React.createElement('i', { className: `fas ${theme === 'light' ? 'fa-moon' : 'fa-sun'}` }));
+    };
+
+
+    // --- From components/Header.tsx ---
+    const Header = ({ companyInfo }) => (
+      React.createElement('header', { className: "bg-primary text-white p-4 text-center shadow-lg flex flex-col items-center gap-2" },
+        companyInfo.logo && React.createElement('img', { src: companyInfo.logo, alt: "Logo", className: "h-16 max-w-full mb-2" }),
+        React.createElement('div', { className: "font-bold text-xl sm:text-2xl" }, companyInfo.name)
+      )
+    );
+
+    // --- From components/MainMenu.tsx ---
+    const MenuCard = ({ icon, label, onClick, className = '' }) => (
+      React.createElement('div', {
+        className: `bg-white dark:bg-slate-800 p-8 rounded-2xl text-center cursor-pointer border border-gray-200 dark:border-gray-700 transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-2 hover:border-primary ${className}`,
+        onClick: onClick
+      },
+        React.createElement('i', { className: `${icon} text-4xl text-primary mb-3 block` }),
+        React.createElement('span', { className: "font-bold text-text dark:text-gray-200 text-base" }, label)
+      )
+    );
+    const MainMenu = ({ onOpenBudgetTypeModal, onOpenSettings, onOpenChangePassword, onShowSavedBudgets }) => (
+      React.createElement('div', { className: "animate-fadeIn" },
+        React.createElement('div', { className: "grid grid-cols-1 sm:grid-cols-2 gap-6 mt-5" },
+          React.createElement(MenuCard, { icon: "fas fa-file-invoice-dollar", label: "Gerar Orçamento", onClick: onOpenBudgetTypeModal }),
+          React.createElement(MenuCard, { icon: "fas fa-save", label: "Orçamentos Salvos", onClick: onShowSavedBudgets }),
+          React.createElement(MenuCard, { icon: "fas fa-cog", label: "Configurações", onClick: onOpenSettings }),
+          React.createElement(MenuCard, { icon: "fas fa-user-shield", label: "Alterar Login/Senha", onClick: onOpenChangePassword }),
+          React.createElement(MenuCard, { icon: "fab fa-whatsapp", label: "Suporte Técnico", onClick: () => window.open('https://wa.me/73991317853', '_blank'), className: "sm:col-span-2" })
+        )
+      )
+    );
+    
+    // --- From components/SettingsModal.tsx ---
+    const SettingsModal = ({ isOpen, onClose, currentPrices, onSavePrices, companyInfo, onSaveCompanyInfo }) => {
+      const [prices, setPrices] = useState(currentPrices);
+      const [info, setInfo] = useState(companyInfo);
+      const fileInputRef = React.useRef(null);
+
+      useEffect(() => { 
+        if(isOpen) {
+          setPrices(currentPrices);
+          setInfo(companyInfo);
+        }
+      }, [currentPrices, companyInfo, isOpen]);
+
+      if (!isOpen) return null;
+
+      const handlePriceChange = (key, value) => {
+        const numericValue = parseFloat(value) || 0;
+        setPrices(prev => ({ ...prev, [key]: numericValue }));
+      };
+      
+      const handleInfoChange = (key, value) => {
+        setInfo(prev => ({ ...prev, [key]: value }));
+      };
+
+      const handleLogoUpload = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            handleInfoChange('logo', reader.result);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      const handleSave = () => {
+        onSavePrices(prices);
+        onSaveCompanyInfo(info);
+        onClose();
+      };
+
+      return React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" },
+        React.createElement('div', { className: "bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col" },
+          React.createElement('div', { className: "p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center" },
+            React.createElement('h2', { className: "text-xl font-bold text-primary" }, 
+              React.createElement('i', { className: "fas fa-cog mr-2" }), "Configurações Gerais"),
+            React.createElement('button', { onClick: onClose, className: "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 text-2xl" }, "×")
+          ),
+          React.createElement('div', { className: "p-5 overflow-y-auto" },
+            // Company Info
+            React.createElement('h3', { className: "text-lg font-semibold text-text dark:text-gray-200 border-b pb-2 mb-4" }, "Informações da Empresa"),
+            React.createElement('div', { className: "grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6" },
+                React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Nome da Empresa"), React.createElement('input', { type: "text", value: info.name, onChange: (e) => handleInfoChange('name', e.target.value), className: "w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-slate-700 text-text dark:text-gray-200" })),
+                React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "CNPJ"), React.createElement('input', { type: "text", value: info.cnpj, onChange: (e) => handleInfoChange('cnpj', e.target.value), className: "w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-slate-700 text-text dark:text-gray-200" })),
+                React.createElement('div', {className: "sm:col-span-2"}, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Logo da Empresa"), React.createElement('div', {className: "flex items-center gap-4"}, info.logo && React.createElement('img', {src: info.logo, className: "h-16 w-auto bg-gray-200 p-1 rounded"}), React.createElement('input', {type: 'file', accept: "image/*", ref: fileInputRef, onChange: handleLogoUpload, className: "hidden"}), React.createElement('button', {onClick: () => fileInputRef.current.click(), className: "px-4 py-2 bg-gray-200 dark:bg-slate-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-slate-500 text-sm"}, "Escolher Logo..."), info.logo && React.createElement('button', {onClick: () => handleInfoChange('logo', null), className: "px-4 py-2 bg-red-100 dark:bg-red-900/50 text-danger rounded-md hover:bg-red-200 dark:hover:bg-red-900 text-sm"}, "Remover Logo")))
+            ),
+            // Gemini API Key
+            React.createElement('h3', { className: "text-lg font-semibold text-text dark:text-gray-200 border-b pb-2 mb-4" }, "Integração com IA (Gemini)"),
+             React.createElement('div', { className: "mb-6" },
+                React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Chave de API (API Key)"),
+                React.createElement('input', { type: "password", value: info.apiKey, onChange: (e) => handleInfoChange('apiKey', e.target.value), className: "w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-slate-700 text-text dark:text-gray-200", placeholder:"Cole sua chave de API aqui" }),
+                React.createElement('p', {className: "text-xs text-gray-500 mt-1"}, "Sua chave é salva apenas no seu dispositivo. ", React.createElement('a', {href: "https://aistudio.google.com/app/apikey", target: "_blank", rel: "noopener noreferrer", className: "text-primary hover:underline"}, "Obtenha uma chave aqui."))
+            ),
+            // PDF Customization
+             React.createElement('h3', { className: "text-lg font-semibold text-text dark:text-gray-200 border-b pb-2 mb-4" }, "PDF Personalização"),
+             React.createElement('div', { className: "mb-6" },
+                React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Termos e Observações para PDF"),
+                React.createElement('textarea', { value: info.pdfNotes, onChange: (e) => handleInfoChange('pdfNotes', e.target.value), className: "w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-slate-700 text-text dark:text-gray-200 h-24", placeholder:"Ex: Garantia de 90 dias sobre a mão de obra." })
+            ),
+            // Service Prices
+            React.createElement('h3', { className: "text-lg font-semibold text-text dark:text-gray-200 border-b pb-2 mb-4" }, "Preços dos Serviços"),
+            React.createElement('div', { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
+              (Object.keys(prices)).sort().map(key => React.createElement('div', { key: key }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, priceLabels[key]), React.createElement('div', { className: "relative" }, React.createElement('span', { className: "absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 dark:text-gray-400" }, "R$"), React.createElement('input', { type: "number", value: prices[key], onChange: (e) => handlePriceChange(key, e.target.value), className: "w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-slate-700 text-text dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary" }))))
+            )
+          ),
+          React.createElement('div', { className: "p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3" },
+            React.createElement('button', { onClick: onClose, className: "px-6 py-2 bg-gray-100 dark:bg-slate-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-slate-500 transition border border-gray-300 dark:border-gray-500" }, "Cancelar"),
+            React.createElement('button', { onClick: handleSave, className: "px-6 py-2 bg-primary text-white rounded-md hover:bg-blue-700 transition shadow-sm hover:shadow-md active:scale-95" }, "Salvar Alterações")
+          )
+        )
+      );
+    };
+
+    // --- From components/BudgetCalculatorView.tsx ---
+    const SectionBox = ({ title, children }) => (
+      React.createElement('div', { className: "border border-gray-200 dark:border-gray-700 p-4 rounded-lg mb-4 bg-gray-50 dark:bg-slate-800/50" },
+        React.createElement('h4', { className: "m-0 mb-3 text-gray-600 dark:text-gray-400 uppercase text-xs font-bold tracking-wider border-b border-gray-300 dark:border-gray-600 pb-2" }, title),
+        children
+      )
+    );
+    
+    const AIBudgetAssistant = ({ apiKey, onItemsGenerated, servicePrices, onRequestSettings }) => {
+        const [text, setText] = useState('');
+        const [isLoading, setIsLoading] = useState(false);
+        const [error, setError] = useState('');
+        const [isListening, setIsListening] = useState(false);
+        const recognitionRef = React.useRef(null);
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!apiKey) {
+            return React.createElement('div', { className: "border border-dashed border-primary/50 dark:border-primary/40 p-4 rounded-lg mb-4 bg-blue-50/50 dark:bg-slate-800 text-center" },
+                React.createElement('h4', { className: "m-0 mb-3 text-primary/80 dark:text-primary/70 uppercase text-xs font-bold tracking-wider flex items-center justify-center" }, React.createElement('i', {className: "fas fa-magic mr-2"}), "Assistente de Orçamento com IA"),
+                React.createElement('p', {className: "text-sm text-gray-600 dark:text-gray-300 mb-3"}, "Para usar o assistente de IA, por favor, insira sua Chave de API."),
+                React.createElement('button', {
+                    onClick: onRequestSettings,
+                    className: "bg-primary text-white p-2 px-4 text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors"
+                }, React.createElement('i', {className: "fas fa-cog mr-2"}), "Ir para Configurações")
+            );
+        }
+
+        useEffect(() => {
+            if (!SpeechRecognition) {
+                console.warn("Speech recognition not supported in this browser.");
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'pt-BR';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                setText(prevText => (prevText ? prevText.trim() + ' ' : '') + transcript);
+            };
+
+            recognition.onend = () => {
+                setIsListening(false);
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error:", event.error);
+                setError(`Erro no reconhecimento de voz: ${event.error === 'not-allowed' ? 'Permissão de microfone negada.' : event.error}`);
+                setIsListening(false);
+            };
+
+            recognitionRef.current = recognition;
+            
+            return () => {
+              recognitionRef.current?.stop();
+            }
+        }, [SpeechRecognition]);
+        
+        const handleMicClick = () => {
+            if (!recognitionRef.current) return;
+            
+            if (isListening) {
+                recognitionRef.current.stop();
+            } else {
+                setError('');
+                recognitionRef.current.start();
+                setIsListening(true);
+            }
+        };
+
+        const handleGenerate = async () => {
+            if (!text.trim()) {
+                setError('Por favor, descreva os serviços necessários.');
+                return;
+            }
+            setIsLoading(true);
+            setError('');
+
+            try {
+                const ai = new GoogleGenAI({ apiKey });
+                const prompt = `
+                    Você é um assistente especialista em orçamentos de elétrica.
+                    Analise o texto do usuário e extraia uma lista de serviços.
+                    Os serviços disponíveis e suas chaves são:
+                    - Luminária de Embutir: 'luminaria_embutir'
+                    - Luminária de Sobrepor ou Ponto de Luz: 'luminaria_sobrepor'
+                    - Tomada Simples (TUG): 'tug'
+                    - Tomada Dupla (TUG): 'tug_dupla'
+                    - Interruptor Simples: 'int_simples'
+                    - Interruptor Duplo: 'int_duplo'
+                    - Three-Way ou Interruptor Paralelo: 'three_way'
+                    - Haste de Aterramento: 'aterramento'
+                    - Chuveiro Elétrico: 'chuveiro'
+                    - Ar Condicionado: 'ar_cond'
+                    - Motor Monofásico: 'motor_monofasico'
+                    - Motor Trifásico: 'motor_trifasico'
+                    - Carga Especial ou TUE genérica: 'outro'
+
+                    Para cada item, determine a quantidade, a potência (em Watts) se mencionada (use 100W como padrão para pontos de luz e tomadas se não especificado), e a distância (em metros) se mencionada.
+                    Responda APENAS com o JSON.
+                `;
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-3-flash-preview',
+                    contents: prompt + '\n\nTexto do usuário: "' + text + '"',
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    itemKey: { type: Type.STRING, description: "A chave do serviço, ex: 'tug' ou 'chuveiro'." },
+                                    quantity: { type: Type.NUMBER, description: "A quantidade de itens." },
+                                    power: { type: Type.NUMBER, description: "A potência em Watts. Padrão 100 para tomadas/luz." },
+                                    distance: { type: Type.NUMBER, description: "A distância em metros, se aplicável." },
+                                    btu: {type: Type.NUMBER, description: "Capacidade em BTUs para ar condicionado."},
+                                    cv: {type: Type.NUMBER, description: "Potência em CV para motores."},
+                                    customName: {type: Type.STRING, description: "Nome customizado para item 'outro'."}
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                const jsonResponse = JSON.parse(response.text.trim());
+                
+                const newItems = jsonResponse.map(item => {
+                    const pricePerItem = servicePrices[item.itemKey] || servicePrices.tue || 0;
+                    const pontoOption = PONTO_OPTIONS.find(p => p.value === item.itemKey);
+                    
+                    let desc = '', categoria = 'CUSTOM', subcategoria = 'geral', isSwitch = false, potencia = 0, nomeTUE = '';
+                    
+                    if (pontoOption) { // It's a general point
+                        desc = item.itemKey === 'aterramento' 
+                            ? `Sistema de Aterramento (${item.quantity} Hastes)` 
+                            : (!pontoOption.isSwitch ? `${item.quantity}x ${pontoOption.label} (${item.power}W)` : `${item.quantity}x ${pontoOption.label}`);
+                        categoria = item.itemKey === 'aterramento' ? 'ATERRAMENTO' : (item.itemKey.includes('luminaria') ? 'LUZ' : (pontoOption.isSwitch ? 'INT' : 'TUG'));
+                        isSwitch = pontoOption.isSwitch;
+                        potencia = !isSwitch && item.itemKey !== 'aterramento' ? item.power * item.quantity : 0;
+
+                    } else { // It's a TUE
+                         categoria = 'TUE';
+                         if(item.itemKey === 'chuveiro') {
+                             nomeTUE = "Chuveiro Elétrico";
+                             subcategoria = "chuveiro";
+                         } else if (item.itemKey === 'ar_cond') {
+                             nomeTUE = `Ar Condicionado ${item.btu || 12000} BTU`;
+                             subcategoria = "ar";
+                             item.power = TABELA_AR[item.btu || 12000]?.w || 1600;
+                         } else if (item.itemKey === 'motor_monofasico') {
+                             nomeTUE = `Motor Monofásico ${item.cv || 1} CV`;
+                             subcategoria = "motor_monofasico";
+                              item.power = (item.cv || 1) * 735.5;
+                         } else if (item.itemKey === 'motor_trifasico') {
+                             nomeTUE = `Motor Trifásico ${item.cv || 1} CV`;
+                             subcategoria = "motor_trifasico";
+                             item.power = (item.cv || 1) * 735.5;
+                         } else {
+                              nomeTUE = item.customName || "Equipamento Especial";
+                              subcategoria = "geral";
+                         }
+                         desc = `TUE: ${nomeTUE} (${item.power}W) - Dist: ${item.distance || 0}m`;
+                         potencia = item.power;
+                    }
+
+                    return {
+                        id: Date.now() + Math.random(),
+                        desc,
+                        categoria,
+                        subcategoria,
+                        preco: pricePerItem * item.quantity,
+                        potencia: potencia,
+                        qtd: item.quantity,
+                        tipo: item.itemKey,
+                        isSwitch,
+                        distancia: item.distance || 0,
+                        nomeTUE
+                    };
+                });
+                onItemsGenerated(newItems);
+                setText('');
+            } catch (err) {
+                console.error("Gemini API Error:", err);
+                setError("Não foi possível processar o pedido. Verifique sua chave de API e a descrição.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        return React.createElement('div', { className: "border border-dashed border-primary/50 dark:border-primary/40 p-4 rounded-lg mb-4 bg-blue-50/50 dark:bg-slate-800" },
+            React.createElement('h4', { className: "m-0 mb-3 text-primary/80 dark:text-primary/70 uppercase text-xs font-bold tracking-wider flex items-center" }, React.createElement('i', {className: "fas fa-magic mr-2"}), "Assistente de Orçamento com IA"),
+            React.createElement('textarea', {
+                value: text,
+                onChange: e => setText(e.target.value),
+                placeholder: isListening ? "Ouvindo... fale agora." : "Descreva os serviços ou clique no microfone para falar",
+                className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 h-24"
+            }),
+            error && React.createElement('p', { className: "text-danger text-sm mt-2" }, error),
+            React.createElement('div', {className: "flex items-stretch gap-2 mt-2"},
+                React.createElement('button', {
+                    onClick: handleGenerate,
+                    disabled: isLoading || isListening,
+                    className: "flex-grow flex items-center justify-center bg-primary text-white p-3 text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                }, 
+                    isLoading ? React.createElement('i', { className: 'fas fa-spinner animate-spin' }) : React.createElement(React.Fragment, null, React.createElement('i', { className: "fas fa-plus-circle mr-2" }), "Adicionar via Texto")
+                ),
+                SpeechRecognition && React.createElement('button', {
+                  onClick: handleMicClick,
+                  disabled: isLoading,
+                  'aria-label': isListening ? 'Parar gravação' : 'Gravar por voz',
+                  className: `flex-shrink-0 w-14 h-auto flex items-center justify-center rounded-lg transition-all duration-200 shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed ${isListening ? 'bg-danger text-white ring-4 ring-danger/50' : 'bg-secondary text-white hover:bg-green-700'}`
+                },
+                    React.createElement('i', {className: `fas ${isListening ? 'fa-microphone-slash' : 'fa-microphone'} text-xl`})
+                )
+            )
+        );
+    };
+
+    const BudgetCalculatorView = ({ onBack, servicePrices, onSave, loadedBudget, companyInfo, onRequestSettings }) => {
+      const [budgetState, setBudgetState] = useState(loadedBudget?.data || {
+          cliente: '', validade: 5, padrao: '1', tensao: '127',
+          distGeral: 10, items: []
+      });
+      const [id, setId] = useState(loadedBudget?.id || null);
+      const [saveStatus, setSaveStatus] = useState('');
+      const { cliente, validade, padrao, tensao, distGeral, items } = budgetState;
+      
+      const setField = (field, value) => setBudgetState(prev => ({...prev, [field]: value}));
+      
+      const [tipoPonto, setTipoPonto] = useState('luminaria_sobrepor');
+      const [pontoPot, setPontoPot] = useState(100); const [pontoQtd, setPontoQtd] = useState(1);
+      const [tueSelect, setTueSelect] = useState('chuveiro'); const [tueBtu, setTueBtu] = useState('7500');
+      const [tuePot, setTuePot] = useState(5500); const [tueDist, setTueDist] = useState(15);
+      const [tueNomeCustom, setTueNomeCustom] = useState(''); const [tuePotCV, setTuePotCV] = useState(1);
+      const [customDesc, setCustomDesc] = useState(''); const [customPrice, setCustomPrice] = useState(''); const [customQty, setCustomQty] = useState(1);
+      const calculation = useMemo(() => calculateDynamicValues(items, Number(tensao), Number(padrao), servicePrices), [items, tensao, padrao, servicePrices]);
+      
+      const selectedPontoOption = useMemo(() => PONTO_OPTIONS.find(p => p.value === tipoPonto), [tipoPonto]);
+      useEffect(() => { if (!loadedBudget) setField('tensao', padrao === "3" ? '220' : '127'); }, [padrao, loadedBudget]);
+
+      const handleSave = () => {
+          const budgetData = {
+              id: id || Date.now(),
+              savedAt: new Date().toISOString(),
+              type: 'technical',
+              total: (items.reduce((acc, i) => acc + i.preco, 0)) + (calculation?.totalMontagem || 0),
+              data: budgetState
+          };
+          onSave(budgetData);
+          setId(budgetData.id); // Ensure ID is set for subsequent saves
+          setSaveStatus('Salvo!');
+          setTimeout(() => setSaveStatus(''), 2000);
+      };
+      
+      const addItem = () => {
+        if (pontoQtd <= 0) return;
+        const pricePerItem = servicePrices[tipoPonto] || 0;
+        const newItem = { id: Date.now(),
+          desc: tipoPonto === 'aterramento' ? `Sistema de Aterramento (${pontoQtd} Hastes)` : (!selectedPontoOption.isSwitch ? `${pontoQtd}x ${selectedPontoOption.label} (${pontoPot}W)` : `${pontoQtd}x ${selectedPontoOption.label}`),
+          categoria: tipoPonto === 'aterramento' ? 'ATERRAMENTO' : (tipoPonto.includes('luminaria') ? 'LUZ' : (selectedPontoOption.isSwitch ? 'INT' : 'TUG')),
+          preco: pricePerItem * pontoQtd, potencia: !selectedPontoOption.isSwitch && tipoPonto !== 'aterramento' ? pontoPot * pontoQtd : 0,
+          qtd: pontoQtd, tipo: tipoPonto, isSwitch: selectedPontoOption.isSwitch
+        };
+        setField('items', [...items, newItem]);
+      };
+      
+      const addTUE = () => {
+        let pot = 0, nome = "", subclass = "geral", preco = servicePrices.tue, potCV;
+        if (tueSelect === 'chuveiro') { pot = tuePot; nome = "Chuveiro Elétrico"; subclass = "chuveiro"; preco = servicePrices.chuveiro; } 
+        else if (tueSelect === 'ar_cond') { pot = TABELA_AR[Number(tueBtu)].w; nome = `Ar Condicionado ${tueBtu} BTU`; subclass = "ar"; } 
+        else if (tueSelect === 'motor_trifasico') { potCV = tuePotCV; pot = potCV * 735.5; nome = `Motor Trifásico ${potCV} CV`; subclass = "motor_trifasico"; preco = servicePrices.motor_trifasico; } 
+        else if (tueSelect === 'motor_monofasico') { potCV = tuePotCV; pot = potCV * 735.5; nome = `Motor Monofásico ${potCV} CV`; subclass = "motor_monofasico"; preco = servicePrices.motor_monofasico; } 
+        else { pot = tuePot; nome = tueNomeCustom || "Equipamento Especial"; subclass = "geral"; }
+        if(pot <= 0) return;
+        setField('items', [...items, { id: Date.now(), desc: `TUE: ${nome} (${pot.toFixed(0)}W) - Dist: ${tueDist}m`, categoria: 'TUE', subcategoria: subclass, preco: preco, potencia: pot, potenciaCV: potCV, qtd: 1, tipo: 'tue', distancia: tueDist, nomeTUE: nome }]);
+      };
+      
+      const handleItemsGeneratedByAI = (newItems) => {
+        setField('items', [...items, ...newItems]);
+      };
+
+      const addCustomItem = () => {
+          if (!customDesc || !customPrice || customQty <= 0) return;
+          const price = parseFloat(customPrice);
+          const newItem = {
+              id: Date.now(),
+              desc: `${customQty}x ${customDesc}`,
+              categoria: 'CUSTOM',
+              preco: price * customQty,
+              potencia: 0,
+              qtd: customQty,
+          };
+          setField('items', [...items, newItem]);
+          setCustomDesc(''); setCustomPrice(''); setCustomQty(1);
+      };
+      
+      const totalMO_Itens = (items.reduce((acc, i) => acc + i.preco, 0)) + (calculation?.totalMontagem || 0);
+
+      return React.createElement('div', { className: "bg-white dark:bg-slate-900 p-6 rounded-xl shadow-lg animate-fadeIn text-text dark:text-gray-200" },
+        React.createElement('button', { onClick: onBack, className: "bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-4 py-2 rounded-full cursor-pointer inline-block mb-4 font-semibold text-sm hover:bg-gray-100 dark:hover:bg-slate-600 hover:border-primary dark:hover:border-primary hover:text-primary transition-all duration-300" }, React.createElement('i', { className: "fas fa-arrow-left mr-2" }), " Voltar ao Menu"),
+        React.createElement('h2', { className: "text-primary text-2xl font-bold flex items-center gap-3 mt-0 mb-6" }, React.createElement('i', { className: "fas fa-calculator" }), " Novo Orçamento Técnico"),
+        React.createElement(AIBudgetAssistant, { apiKey: companyInfo.apiKey, onItemsGenerated: handleItemsGeneratedByAI, servicePrices, onRequestSettings: onRequestSettings }),
+        React.createElement(SectionBox, { title: "Dados do Orçamento e Cliente" },
+          React.createElement('div', { className: "flex flex-wrap gap-4 items-end" },
+            React.createElement('div', { className: "flex-grow min-w-[200px]" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Cliente:"), React.createElement('input', { type: "text", value: cliente, onChange: e => setField('cliente', e.target.value), placeholder: "Nome do cliente", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+            React.createElement('div', { className: "flex-grow-0" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Validade (Dias):"), React.createElement('input', { type: "number", value: validade, onChange: e => setField('validade', Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }))
+          )
+        ),
+        React.createElement(SectionBox, { title: "Dados da Instalação e Entrada" },
+          React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4 items-end" },
+            React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Padrão:"), React.createElement('select', { value: padrao, onChange: e => setField('padrao', e.target.value), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }, React.createElement('option', { value: "1" }, "Monofásico"), React.createElement('option', { value: "2" }, "Bifásico"), React.createElement('option', { value: "3" }, "Trifásico"))),
+            React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Tensão (V):"), React.createElement('select', { value: tensao, onChange: e => setField('tensao', e.target.value), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }, padrao === "3" ? React.createElement(React.Fragment, null, React.createElement('option', { value: "220" }, "220V (F+N - Trif. 220V)"), React.createElement('option', { value: "380" }, "380V (F+N - Trif. 380V)")) : React.createElement(React.Fragment, null, React.createElement('option', { value: "127" }, "127V (F+N)"), React.createElement('option', { value: "220" }, "220V (F+N ou F+F)")))),
+            React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Dist. Padrão ao QDC (m):"), React.createElement('input', { type: "number", value: distGeral, onChange: e => setField('distGeral', Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }))
+          )
+        ),
+        React.createElement(SectionBox, { title: "Pontos de Uso Geral e Iluminação" },
+          React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-4 gap-4 items-end" },
+            React.createElement('div', { className: "md:col-span-2" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Item:"), React.createElement('select', { value: tipoPonto, onChange: e => setTipoPonto(e.target.value), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }, PONTO_OPTIONS.map(opt => React.createElement('option', { key: opt.value, value: opt.value }, opt.label)))),
+            !selectedPontoOption.isSwitch && tipoPonto !== 'aterramento' && React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Potência (W):"), React.createElement('input', { type: "number", value: pontoPot, onChange: e => setPontoPot(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+            React.createElement('div', { className: selectedPontoOption.isSwitch || tipoPonto === 'aterramento' ? 'md:col-start-3' : '' }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Qtd:"), React.createElement('input', { type: "number", value: pontoQtd, onChange: e => setPontoQtd(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+            React.createElement('button', { onClick: addItem, className: "flex items-center justify-center bg-slate-700 text-white p-3 text-sm font-bold rounded-lg hover:bg-slate-800 transition-colors w-full h-full" }, React.createElement('i', {className: 'fas fa-plus mr-2'}), "Add")
+          )
+        ),
+        React.createElement(SectionBox, { title: "Cargas Especiais (TUE)" },
+          React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4 items-end" },
+            React.createElement('div', { className: "md:col-span-3" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Tipo de TUE:"), React.createElement('select', { value: tueSelect, onChange: e => setTueSelect(e.target.value), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }, React.createElement('option', { value: "chuveiro" }, "Chuveiro Elétrico"), React.createElement('option', { value: "motor_monofasico" }, "Motor Monofásico"), React.createElement('option', { value: "motor_trifasico" }, "Motor Trifásico"), React.createElement('option', { value: "ar_cond" }, "Ar Condicionado"), React.createElement('option', { value: "outro" }, "Outro (Manual)"))),
+            tueSelect === 'ar_cond' && React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Capacidade (BTU):"), React.createElement('select', { value: tueBtu, onChange: e => setTueBtu(e.target.value), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }, Object.keys(TABELA_AR).map(btu => React.createElement('option', { key: btu, value: btu }, `${Number(btu).toLocaleString('pt-BR')} BTU`)))),
+            (tueSelect === 'chuveiro' || tueSelect === 'outro') && React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Potência (W):"), React.createElement('input', { type: "number", value: tuePot, onChange: e => setTuePot(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+            tueSelect.startsWith('motor') && React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Potência (CV):"), React.createElement('input', { type: "number", value: tuePotCV, onChange: e => setTuePotCV(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+            React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Distância (m):"), React.createElement('input', { type: "number", value: tueDist, onChange: e => setTueDist(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+            React.createElement('button', { onClick: addTUE, className: "flex items-center justify-center bg-slate-700 text-white p-3 text-sm font-bold rounded-lg hover:bg-slate-800 transition-colors w-full h-full" }, React.createElement('i', {className: 'fas fa-plus mr-2'}), "Add TUE")
+          ),
+          tueSelect === 'outro' && React.createElement('div', { className: "mt-4" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Descrição Personalizada:"), React.createElement('input', { type: "text", value: tueNomeCustom, onChange: e => setTueNomeCustom(e.target.value), placeholder: "Ex: Forno Elétrico", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }))
+        ),
+        React.createElement(SectionBox, { title: "Serviços Adicionais" },
+            React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-4 gap-4 items-end" },
+                React.createElement('div', { className: "md:col-span-2" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Descrição do Serviço:"), React.createElement('input', { type: "text", value: customDesc, onChange: e => setCustomDesc(e.target.value), placeholder: "Ex: Alvenaria para caixa", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Qtd:"), React.createElement('input', { type: "number", value: customQty, onChange: e => setCustomQty(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Valor Total (R$):"), React.createElement('input', { type: "number", value: customPrice, onChange: e => setCustomPrice(e.target.value), placeholder: "100.00", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                React.createElement('button', { onClick: addCustomItem, className: "flex items-center justify-center bg-slate-700 text-white p-3 text-sm font-bold rounded-lg hover:bg-slate-800 transition-colors w-full md:col-span-4" }, React.createElement('i', {className: 'fas fa-plus mr-2'}), "Add Serviço Adicional")
+            )
+        ),
+        React.createElement('div', { className: "bg-white dark:bg-slate-900/50 p-5 rounded-lg mt-5 border-l-4 border-primary shadow-sm" },
+          React.createElement('h4', { className: "text-lg font-bold text-text dark:text-gray-200" }, "Detalhamento da Proposta"),
+          React.createElement('div', { className: "mt-4" }, 
+            items.length === 0 ? React.createElement('p', { className: "text-gray-500 dark:text-gray-400 text-sm" }, "Nenhum item adicionado.") :
+            items.map(item => React.createElement('div', { key: item.id, className: "text-sm border-b border-gray-200 dark:border-gray-700 py-2 flex justify-between items-center" },
+              React.createElement('span', null, item.desc),
+              React.createElement('span', { className: "font-semibold" }, `R$ ${item.preco.toFixed(2)}`, React.createElement('button', { onClick: () => setField('items', items.filter(i => i.id !== item.id)), className: "text-danger ml-3 hover:text-red-700" }, React.createElement('i', { className: "fas fa-trash-alt" })))
+            ))
+          ),
+          calculation && React.createElement('div', { className: "mt-4 text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-slate-800 p-3 rounded-md" },
+            React.createElement('b', null, "Circuitos:"), ` ${calculation.totalCircuitos} | `, React.createElement('b', null, "Montagem QDC + Padrão:"), ` R$ ${calculation.totalMontagem.toFixed(2)}`, React.createElement('br'),
+            React.createElement('b', null, "Carga Instalada:"), ` ${(calculation.instalada / 1000).toFixed(2)} kW | `, React.createElement('b', null, "Demanda:"), ` ${(calculation.demanda / 1000).toFixed(2)} kW`
+          ),
+          React.createElement('div', { className: "mt-4 font-bold text-lg text-primary border-t-2 border-dashed border-gray-300 dark:border-gray-600 pt-3 flex justify-between" },
+            React.createElement('span', null, "Total Estimado:"),
+            React.createElement('span', null, `R$ ${totalMO_Itens.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+          ),
+          React.createElement('div', { className: "text-xs text-gray-500 dark:text-gray-400 mt-3" },
+            `${companyInfo.name} | CNPJ: ${companyInfo.cnpj}`, React.createElement('br'),
+            "Dimensionamento baseado na NBR 5410 e Normas COELBA."
+          )
+        ),
+        React.createElement('div', { className: "flex flex-col sm:flex-row gap-4 mt-6" },
+            React.createElement('button', { onClick: handleSave, className: "flex-1 flex items-center justify-center bg-secondary text-white font-bold p-4 rounded-lg text-lg transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] hover:bg-green-700" }, React.createElement('i', {className: 'fas fa-save mr-3'}), saveStatus || 'Salvar'),
+            React.createElement('button', { onClick: () => calculation && generateTechnicalPdf({ cliente, validade: validade.toString(), tensao: Number(tensao), padrao: Number(padrao), distGeral, items, calculation, companyInfo }), className: "flex-1 flex items-center justify-center w-full bg-primary text-white font-bold p-4 rounded-lg text-lg transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] hover:bg-blue-700" }, React.createElement('i', {className: 'fas fa-file-pdf mr-3'}), "GERAR PDF TÉCNICO COMPLETO")
+        )
+      );
+    };
+
+    const QuickBudgetView = ({ onBack, servicePrices, onSave, loadedBudget, companyInfo }) => {
+        const [budgetState, setBudgetState] = useState(loadedBudget?.data || {
+            cliente: '', validade: 5, items: []
+        });
+        const [id, setId] = useState(loadedBudget?.id || null);
+        const [saveStatus, setSaveStatus] = useState('');
+        const { cliente, validade, items } = budgetState;
+
+        const setField = (field, value) => setBudgetState(prev => ({ ...prev, [field]: value }));
+        
+        const [selectedService, setSelectedService] = useState('tug');
+        const [quantity, setQuantity] = useState(1);
+        const [customDesc, setCustomDesc] = useState('');
+        const [customUnitPrice, setCustomUnitPrice] = useState('');
+        const [customQty, setCustomQty] = useState(1);
+
+        const total = items.reduce((acc, item) => acc + item.totalPrice, 0);
+
+        const handleSave = () => {
+          const budgetData = {
+              id: id || Date.now(),
+              savedAt: new Date().toISOString(),
+              type: 'quick',
+              total: total,
+              data: budgetState
+          };
+          onSave(budgetData);
+          setId(budgetData.id);
+          setSaveStatus('Salvo!');
+          setTimeout(() => setSaveStatus(''), 2000);
+        };
+        
+        const handleAddItem = () => {
+            if (quantity <= 0 || !selectedService) return;
+            const unitPrice = servicePrices[selectedService] || 0;
+            const newItem = {
+                id: Date.now(),
+                key: selectedService,
+                desc: priceLabels[selectedService] || 'Serviço',
+                qtd: quantity,
+                unitPrice: unitPrice,
+                totalPrice: unitPrice * quantity,
+            };
+            setField('items', [...items, newItem]);
+            setQuantity(1);
+        };
+        
+        const handleAddCustomItem = () => {
+            if (!customDesc || customUnitPrice <= 0 || customQty <= 0) return;
+            const unitPrice = parseFloat(customUnitPrice);
+            const newItem = {
+                id: Date.now(),
+                key: 'custom-' + Date.now(),
+                desc: customDesc,
+                qtd: customQty,
+                unitPrice: unitPrice,
+                totalPrice: unitPrice * customQty,
+            };
+            setField('items', [...items, newItem]);
+            setCustomDesc(''); setCustomUnitPrice(''); setCustomQty(1);
+        };
+
+        const handleDeleteItem = (id) => {
+            setField('items', items.filter(item => item.id !== id));
+        };
+
+        return React.createElement('div', { className: "bg-white dark:bg-slate-900 p-6 rounded-xl shadow-lg animate-fadeIn text-text dark:text-gray-200" },
+            React.createElement('button', { onClick: onBack, className: "bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-4 py-2 rounded-full cursor-pointer inline-block mb-4 font-semibold text-sm hover:bg-gray-100 dark:hover:bg-slate-600 hover:border-primary dark:hover:border-primary hover:text-primary transition-all duration-300" }, React.createElement('i', { className: "fas fa-arrow-left mr-2" }), " Voltar ao Menu"),
+            React.createElement('h2', { className: "text-primary text-2xl font-bold flex items-center gap-3 mt-0 mb-6" }, React.createElement('i', { className: "fas fa-bolt" }), " Orçamento Rápido"),
+            React.createElement(SectionBox, { title: "Dados do Cliente" },
+                React.createElement('div', { className: "flex flex-wrap gap-4 items-end" },
+                    React.createElement('div', { className: "flex-grow min-w-[200px]" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Cliente:"), React.createElement('input', { type: "text", value: cliente, onChange: e => setField('cliente', e.target.value), placeholder: "Nome do cliente", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                    React.createElement('div', { className: "flex-grow-0" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Validade (Dias):"), React.createElement('input', { type: "number", value: validade, onChange: e => setField('validade', Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }))
+                )
+            ),
+            React.createElement(SectionBox, { title: "Adicionar Serviço Padrão" },
+                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4 items-end" },
+                    React.createElement('div', { className: "md:col-span-2" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Serviço:"), React.createElement('select', { value: selectedService, onChange: e => setSelectedService(e.target.value), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" },
+                        Object.entries(priceLabels).map(([key, label]) => React.createElement('option', { key: key, value: key }, label))
+                    )),
+                    React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Qtd:"), React.createElement('input', { type: "number", value: quantity, onChange: e => setQuantity(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                    React.createElement('button', { onClick: handleAddItem, className: "flex items-center justify-center bg-slate-700 text-white p-3 text-sm font-bold rounded-lg hover:bg-slate-800 transition-colors w-full md:col-span-3" }, React.createElement('i', {className: 'fas fa-plus mr-2'}), "Adicionar Item Padrão")
+                )
+            ),
+             React.createElement(SectionBox, { title: "Adicionar Serviço Personalizado" },
+                React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4 items-end" },
+                    React.createElement('div', { className: "md:col-span-3" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Descrição:"), React.createElement('input', { type: "text", value: customDesc, onChange: e => setCustomDesc(e.target.value), placeholder: "Ex: Troca de fiação geral", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                    React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Qtd:"), React.createElement('input', { type: "number", value: customQty, onChange: e => setCustomQty(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                    React.createElement('div', null, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Vlr. Unitário (R$):"), React.createElement('input', { type: "number", value: customUnitPrice, onChange: e => setCustomUnitPrice(e.target.value), placeholder:"150.00", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                    React.createElement('button', { onClick: handleAddCustomItem, className: "flex items-center justify-center bg-slate-800 text-white p-3 text-sm font-bold rounded-lg hover:bg-black transition-colors w-full" }, React.createElement('i', {className: 'fas fa-plus mr-2'}), "Add Personalizado")
+                )
+            ),
+            React.createElement('div', { className: "bg-white dark:bg-slate-900/50 p-5 rounded-lg mt-5 border-l-4 border-secondary shadow-sm" },
+                React.createElement('h4', { className: "text-lg font-bold text-text dark:text-gray-200" }, "Itens do Orçamento"),
+                React.createElement('div', { className: "mt-4" },
+                    items.length === 0 ? React.createElement('p', { className: "text-gray-500 dark:text-gray-400 text-sm" }, "Nenhum item adicionado.") :
+                    React.createElement('div', {className: "overflow-x-auto"},
+                        React.createElement('table', {className: "w-full text-sm text-left"},
+                            React.createElement('thead', {className: "text-xs text-gray-700 uppercase bg-gray-50 dark:bg-slate-700 dark:text-gray-400"},
+                                React.createElement('tr', null, 
+                                    React.createElement('th', {scope: "col", className: "px-4 py-3"}, "Descrição"),
+                                    React.createElement('th', {scope: "col", className: "px-4 py-3"}, "Qtd."),
+                                    React.createElement('th', {scope: "col", className: "px-4 py-3"}, "Vlr. Unit."),
+                                    React.createElement('th', {scope: "col", className: "px-4 py-3"}, "Vlr. Total"),
+                                    React.createElement('th', {scope: "col", className: "px-4 py-3"},""),
+                                )
+                            ),
+                            React.createElement('tbody', null,
+                                items.map(item => React.createElement('tr', { key: item.id, className: "border-b dark:border-gray-700" },
+                                    React.createElement('td', {className: "px-4 py-2 font-medium text-gray-900 dark:text-white whitespace-nowrap"}, item.desc),
+                                    React.createElement('td', {className: "px-4 py-2"}, item.qtd),
+                                    React.createElement('td', {className: "px-4 py-2"}, `R$ ${item.unitPrice.toFixed(2)}`),
+                                    React.createElement('td', {className: "px-4 py-2 font-semibold"}, `R$ ${item.totalPrice.toFixed(2)}`),
+                                    React.createElement('td', {className: "px-4 py-2"}, React.createElement('button', { onClick: () => handleDeleteItem(item.id), className: "text-danger hover:text-red-700" }, React.createElement('i', { className: "fas fa-trash-alt" })))
+                                ))
+                            )
+                        )
+                    )
+                ),
+                React.createElement('div', { className: "mt-4 font-bold text-lg text-secondary border-t-2 border-dashed border-gray-300 dark:border-gray-600 pt-3 flex justify-between" },
+                    React.createElement('span', null, "Total:"),
+                    React.createElement('span', null, `R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+                )
+            ),
+            React.createElement('div', { className: "flex flex-col sm:flex-row gap-4 mt-6" },
+                React.createElement('button', { onClick: handleSave, className: "flex-1 flex items-center justify-center bg-secondary text-white font-bold p-4 rounded-lg text-lg transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] hover:bg-green-700" }, React.createElement('i', {className: 'fas fa-save mr-3'}), saveStatus || 'Salvar'),
+                React.createElement('button', { onClick: () => generateSimplePdf({ cliente, validade, items, companyInfo }), className: "flex-1 flex items-center justify-center w-full bg-primary text-white font-bold p-4 rounded-lg text-lg transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] hover:bg-blue-700" }, React.createElement('i', {className: 'fas fa-file-pdf mr-3'}), "GERAR PDF SIMPLES")
+            )
+        );
+    };
+
+    const BudgetTypeModal = ({ isOpen, onClose, onSelect, hasApiKey }) => {
+        if (!isOpen) return null;
+        return React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" },
+            React.createElement('div', { className: "bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md animate-fadeIn" },
+                React.createElement('div', { className: "p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center" },
+                    React.createElement('h2', { className: "text-xl font-bold text-primary" }, "Escolha o Tipo de Orçamento"),
+                    React.createElement('button', { onClick: onClose, className: "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 text-2xl" }, "×")
+                ),
+                React.createElement('div', { className: "p-5 grid grid-cols-1 gap-4" },
+                    React.createElement('div', { onClick: () => onSelect('technical'), className: "p-6 border-2 border-gray-200 dark:border-gray-600 rounded-lg text-center cursor-pointer hover:border-primary hover:bg-blue-50 dark:hover:bg-slate-700 transition" },
+                        React.createElement('i', { className: "fas fa-hard-hat text-4xl text-primary mb-3" }),
+                        React.createElement('h3', { className: "font-bold text-lg text-text dark:text-gray-200" }, "Orçamento Técnico Completo"),
+                        React.createElement('p', { className: "text-sm text-gray-600 dark:text-gray-400" }, "Cálculos detalhados e lista de materiais (NBR 5410).")
+                    ),
+                    React.createElement('div', { onClick: () => onSelect('quick'), className: "p-6 border-2 border-gray-200 dark:border-gray-600 rounded-lg text-center cursor-pointer hover:border-secondary hover:bg-green-50 dark:hover:bg-slate-700 transition" },
+                        React.createElement('i', { className: "fas fa-bolt text-4xl text-secondary mb-3" }),
+                        React.createElement('h3', { className: "font-bold text-lg text-text dark:text-gray-200" }, "Orçamento Rápido"),
+                        React.createElement('p', { className: "text-sm text-gray-600 dark:text-gray-400" }, "Gera um PDF simples com a lista de serviços e valor total.")
+                    ),
+                     React.createElement('div', { 
+                        onClick: () => hasApiKey ? onSelect('quickVoice') : onSelect('requestApiKey'), 
+                        className: `p-6 border-2 rounded-lg text-center transition ${hasApiKey ? 'cursor-pointer hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-slate-700 border-gray-200 dark:border-gray-600' : 'cursor-not-allowed bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-gray-700 opacity-60'}` 
+                     },
+                        React.createElement('i', { className: `fas fa-microphone-alt text-4xl mb-3 ${hasApiKey ? 'text-purple-500' : 'text-gray-400'}` }),
+                        React.createElement('h3', { className: "font-bold text-lg text-text dark:text-gray-200" }, "Rápido por Voz"),
+                        React.createElement('p', { className: "text-sm text-gray-600 dark:text-gray-400" }, hasApiKey ? "Dite o serviço e o valor para gerar um PDF instantaneamente." : "Requer Chave de API nas Configurações.")
+                    )
+                )
+            )
+        );
+    };
+
+    const LoginScreen = ({ onLoginSuccess }) => {
+        const [username, setUsername] = useState('');
+        const [password, setPassword] = useState('');
+        const [error, setError] = useState('');
+        const formRef = React.useRef();
+
+        const handleLogin = (e) => {
+            e.preventDefault();
+            try {
+                const storedCreds = JSON.parse(localStorage.getItem('rd-credentials'));
+                if (storedCreds.username === username && storedCreds.password === password) {
+                    onLoginSuccess();
+                } else {
+                    setError('Usuário ou senha inválidos.');
+                    formRef.current.classList.add('animate-shake');
+                    setTimeout(() => formRef.current.classList.remove('animate-shake'), 500);
+                }
+            } catch {
+                setError('Erro ao verificar credenciais.');
+            }
+        };
+
+        return React.createElement('div', { className: "bg-bg dark:bg-slate-900 min-h-screen flex items-center justify-center p-4" },
+            React.createElement('div', { className: "w-full max-w-sm" },
+                React.createElement(Header, { companyInfo: DEFAULT_COMPANY_INFO }),
+                React.createElement('form', { ref: formRef, onSubmit: handleLogin, className: "bg-white dark:bg-slate-800 p-8 rounded-b-lg shadow-lg" },
+                    React.createElement('h2', { className: "text-2xl font-bold text-center text-gray-700 dark:text-gray-200 mb-6" }, "Acesso ao Sistema"),
+                    error && React.createElement('p', { className: "bg-red-100 text-danger text-sm text-center p-3 rounded-lg mb-4" }, error),
+                    React.createElement('div', { className: "mb-4" },
+                        React.createElement('label', { className: "block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" }, "Usuário"),
+                        React.createElement('input', { type: "text", value: username, onChange: e => setUsername(e.target.value), className: "w-full p-3 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-text dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary", placeholder: "admin" })
+                    ),
+                    React.createElement('div', { className: "mb-6" },
+                        React.createElement('label', { className: "block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" }, "Senha"),
+                        React.createElement('input', { type: "password", value: password, onChange: e => setPassword(e.target.value), className: "w-full p-3 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-text dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary", placeholder: "admin" })
+                    ),
+                    React.createElement('button', { type: "submit", className: "flex items-center justify-center w-full bg-primary text-white font-bold p-3 rounded-lg text-lg transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] hover:bg-blue-700" }, React.createElement('i', {className: 'fas fa-sign-in-alt mr-2'}), "Entrar")
+                )
+            )
+        );
+    };
+
+    const ChangePasswordModal = ({ isOpen, onClose }) => {
+        const [currentPassword, setCurrentPassword] = useState('');
+        const [newUsername, setNewUsername] = useState('');
+        const [newPassword, setNewPassword] = useState('');
+        const [confirmPassword, setConfirmPassword] = useState('');
+        const [error, setError] = useState('');
+        const [success, setSuccess] = useState('');
+
+        useEffect(() => {
+            if (isOpen) {
+                const creds = JSON.parse(localStorage.getItem('rd-credentials'));
+                setNewUsername(creds.username);
+                // Reset fields on open
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setError('');
+                setSuccess('');
+            }
+        }, [isOpen]);
+
+        if (!isOpen) return null;
+        
+        const handleSave = () => {
+            setError('');
+            setSuccess('');
+            const storedCreds = JSON.parse(localStorage.getItem('rd-credentials'));
+            
+            if (storedCreds.password !== currentPassword) {
+                return setError('A senha atual está incorreta.');
+            }
+            if (!newUsername.trim()) {
+                return setError('O novo nome de usuário não pode estar em branco.');
+            }
+            if (newPassword.length < 4) {
+                return setError('A nova senha deve ter pelo menos 4 caracteres.');
+            }
+            if (newPassword !== confirmPassword) {
+                return setError('As novas senhas não coincidem.');
+            }
+
+            const newCreds = { username: newUsername, password: newPassword };
+            localStorage.setItem('rd-credentials', JSON.stringify(newCreds));
+            setSuccess('Credenciais alteradas com sucesso!');
+            setTimeout(onClose, 1500); // Close modal after success message
+        };
+
+        return React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" },
+            React.createElement('div', { className: "bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md" },
+                React.createElement('div', { className: "p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center" },
+                    React.createElement('h2', { className: "text-xl font-bold text-primary" }, React.createElement('i', { className: "fas fa-user-shield mr-2" }), "Alterar Login e Senha"),
+                    React.createElement('button', { onClick: onClose, className: "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 text-2xl" }, "×")
+                ),
+                React.createElement('div', { className: "p-5 space-y-4" },
+                    error && React.createElement('p', { className: "bg-red-100 text-danger text-sm text-center p-3 rounded-lg" }, error),
+                    success && React.createElement('p', { className: "bg-green-100 text-secondary text-sm text-center p-3 rounded-lg" }, success),
+                    React.createElement('div', null,
+                        React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Senha Atual"),
+                        React.createElement('input', { type: "password", value: currentPassword, onChange: e => setCurrentPassword(e.target.value), className: "w-full p-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-text dark:text-gray-200 rounded-md" })
+                    ),
+                     React.createElement('div', null,
+                        React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Novo Usuário"),
+                        React.createElement('input', { type: "text", value: newUsername, onChange: e => setNewUsername(e.target.value), className: "w-full p-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-text dark:text-gray-200 rounded-md" })
+                    ),
+                    React.createElement('div', null,
+                        React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Nova Senha"),
+                        React.createElement('input', { type: "password", value: newPassword, onChange: e => setNewPassword(e.target.value), className: "w-full p-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-text dark:text-gray-200 rounded-md" })
+                    ),
+                    React.createElement('div', null,
+                        React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Confirmar Nova Senha"),
+                        React.createElement('input', { type: "password", value: confirmPassword, onChange: e => setConfirmPassword(e.target.value), className: "w-full p-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-text dark:text-gray-200 rounded-md" })
+                    )
+                ),
+                React.createElement('div', { className: "p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3" },
+                    React.createElement('button', { onClick: onClose, className: "px-6 py-2 bg-gray-100 dark:bg-slate-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-slate-500 transition border border-gray-300 dark:border-gray-500" }, "Cancelar"),
+                    React.createElement('button', { onClick: handleSave, className: "px-6 py-2 bg-primary text-white rounded-md hover:bg-blue-700 transition shadow-sm hover:shadow-md active:scale-95" }, "Salvar")
+                )
+            )
+        );
+    };
+
+    const SavedBudgetsView = ({ budgets, onBack, onLoad, onDelete }) => {
+        return React.createElement('div', { className: "bg-white dark:bg-slate-900 p-6 rounded-xl shadow-lg animate-fadeIn text-text dark:text-gray-200" },
+            React.createElement('button', { onClick: onBack, className: "bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-4 py-2 rounded-full cursor-pointer inline-block mb-4 font-semibold text-sm hover:bg-gray-100 dark:hover:bg-slate-600 hover:border-primary dark:hover:border-primary hover:text-primary transition-all duration-300" }, React.createElement('i', { className: "fas fa-arrow-left mr-2" }), " Voltar ao Menu"),
+            React.createElement('h2', { className: "text-primary text-2xl font-bold flex items-center gap-3 mt-0 mb-6" }, React.createElement('i', { className: "fas fa-save" }), " Orçamentos Salvos"),
+            budgets.length === 0 
+                ? React.createElement('p', { className: "text-center text-gray-500 dark:text-gray-400 py-10" }, "Nenhum orçamento salvo ainda.")
+                : React.createElement('div', { className: "space-y-4" },
+                    budgets.sort((a,b) => b.id - a.id).map(budget => React.createElement('div', { key: budget.id, className: "bg-gray-50 dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4" },
+                        React.createElement('div', { className: "flex-grow" },
+                            React.createElement('p', { className: "font-bold text-lg text-primary" }, budget.data.cliente || "Cliente não informado"),
+                            React.createElement('p', { className: "text-sm text-gray-600 dark:text-gray-400" }, 
+                                `Salvo em: ${new Date(budget.savedAt).toLocaleString('pt-BR')} | `,
+                                React.createElement('span', {className: `font-semibold ${budget.type === 'technical' ? 'text-blue-500' : 'text-green-500'}`}, budget.type === 'technical' ? 'Técnico' : 'Rápido')
+                            ),
+                            React.createElement('p', { className: "font-bold text-lg mt-1" }, `R$ ${budget.total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`)
+                        ),
+                        React.createElement('div', { className: "flex gap-2 w-full sm:w-auto" },
+                            React.createElement('button', { onClick: () => onLoad(budget), className: "flex-1 sm:flex-initial flex items-center justify-center w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition text-sm" }, React.createElement('i', { className: "fas fa-folder-open mr-2" }), "Carregar"),
+                            React.createElement('button', { onClick: () => onDelete(budget.id), className: "flex-1 sm:flex-initial flex items-center justify-center w-full px-4 py-2 bg-danger text-white rounded-md hover:bg-red-700 transition text-sm" }, React.createElement('i', { className: "fas fa-trash-alt mr-2" }), "Excluir")
+                        )
+                    ))
+                )
+        );
+    };
+
+    const QuickVoiceBudgetModal = ({ isOpen, onClose, companyInfo }) => {
+        const [cliente, setCliente] = useState('');
+        const [validade, setValidade] = useState(5);
+        const [text, setText] = useState('');
+        const [isLoading, setIsLoading] = useState(false);
+        const [error, setError] = useState('');
+        const [isListening, setIsListening] = useState(false);
+        const recognitionRef = React.useRef(null);
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        useEffect(() => {
+            if (!isOpen) return;
+            // Reset state when modal opens
+            setCliente(''); setValidade(5); setText(''); setError(''); setIsLoading(false); setIsListening(false);
+            
+            if (!SpeechRecognition) {
+                console.warn("Speech recognition not supported in this browser.");
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'pt-BR';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                setText(prevText => (prevText ? prevText.trim() + ' ' : '') + transcript);
+            };
+            recognition.onend = () => setIsListening(false);
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error:", event.error);
+                setError(`Erro no reconhecimento de voz: ${event.error === 'not-allowed' ? 'Permissão de microfone negada.' : event.error}`);
+                setIsListening(false);
+            };
+            recognitionRef.current = recognition;
+             return () => {
+              recognitionRef.current?.stop();
+            }
+        }, [isOpen, SpeechRecognition]);
+
+        if (!isOpen) return null;
+
+        const handleMicClick = () => {
+            if (!recognitionRef.current) {
+                setError("Reconhecimento de voz não é suportado neste navegador.");
+                return;
+            };
+            if (isListening) {
+                recognitionRef.current.stop();
+            } else {
+                setError('');
+                recognitionRef.current.start();
+                setIsListening(true);
+            }
+        };
+
+        const handleGenerate = async () => {
+            if (!text.trim()) return setError('Por favor, descreva o serviço e o valor.');
+            setIsLoading(true);
+            setError('');
+            try {
+                const ai = new GoogleGenAI({ apiKey: companyInfo.apiKey });
+                const prompt = `
+                    Você é um assistente para criar orçamentos. Sua tarefa é extrair a descrição de um serviço e seu valor total a partir de um texto.
+                    O valor pode estar escrito por extenso (ex: 'cem reais') ou como número (ex: '100', 'R$100,00').
+                    Responda APENAS com um objeto JSON.
+                `;
+                 const response = await ai.models.generateContent({
+                    model: 'gemini-3-flash-preview',
+                    contents: prompt + '\n\nTexto do usuário: "' + text + '"',
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                description: { type: Type.STRING, description: "A descrição completa do serviço." },
+                                price: { type: Type.NUMBER, description: "O valor numérico total do serviço." },
+                                quantity: { type: Type.NUMBER, description: "A quantidade, se mencionada. Padrão é 1." }
+                            }
+                        }
+                    }
+                });
+                
+                const result = JSON.parse(response.text.trim());
+                if (!result.description || !result.price) {
+                  throw new Error("A IA não conseguiu identificar a descrição ou o preço.");
+                }
+
+                const items = [{
+                    id: Date.now(),
+                    desc: result.description,
+                    qtd: result.quantity || 1,
+                    unitPrice: result.price / (result.quantity || 1),
+                    totalPrice: result.price,
+                }];
+                generateSimplePdf({ cliente, validade, items, companyInfo });
+                onClose();
+
+            } catch (err) {
+                console.error("Quick Voice Budget Error:", err);
+                setError("Não foi possível processar o pedido. Tente ser mais claro na descrição do serviço e valor.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        return React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" },
+            React.createElement('div', { className: "bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg" },
+                React.createElement('div', { className: "p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center" },
+                    React.createElement('h2', { className: "text-xl font-bold text-primary flex items-center" }, React.createElement('i', {className: 'fas fa-microphone-alt mr-3'}), "Orçamento Rápido por Voz"),
+                    React.createElement('button', { onClick: onClose, className: "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 text-2xl" }, "×")
+                ),
+                React.createElement('div', { className: "p-5" },
+                    React.createElement('div', { className: "flex flex-wrap gap-4 items-end mb-4" },
+                        React.createElement('div', { className: "flex-grow min-w-[200px]" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Cliente:"), React.createElement('input', { type: "text", value: cliente, onChange: e => setCliente(e.target.value), placeholder: "Nome do cliente", className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" })),
+                        React.createElement('div', { className: "flex-grow-0" }, React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block" }, "Validade (Dias):"), React.createElement('input', { type: "number", value: validade, onChange: e => setValidade(Number(e.target.value)), className: "w-full p-3 mt-1 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700" }))
+                    ),
+                    React.createElement('label', { className: "text-sm font-bold text-gray-600 dark:text-gray-300 block mb-1" }, "Serviço e Valor:"),
+                    React.createElement('div', { className: "relative" },
+                         React.createElement('textarea', {
+                            value: text,
+                            onChange: e => setText(e.target.value),
+                            placeholder: isListening ? "Ouvindo... fale agora." : "Clique no microfone e diga o serviço e valor. Ex: 'Troca de fiação geral, valor quinhentos reais'",
+                            className: "w-full p-3 pr-16 text-base border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 h-28"
+                        }),
+                        React.createElement('button', {
+                            onClick: handleMicClick,
+                            disabled: isLoading,
+                            'aria-label': isListening ? 'Parar gravação' : 'Gravar por voz',
+                            className: `absolute top-1/2 right-3 -translate-y-1/2 w-12 h-12 flex items-center justify-center rounded-full transition-all duration-200 shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed ${isListening ? 'bg-danger text-white ring-4 ring-danger/50' : 'bg-secondary text-white hover:bg-green-700'}`
+                        }, React.createElement('i', {className: `fas ${isListening ? 'fa-microphone-slash' : 'fa-microphone'} text-xl`})
+                    )),
+                    error && React.createElement('p', { className: "text-danger text-sm mt-2 text-center" }, error),
+                ),
+                 React.createElement('div', { className: "p-5 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-end gap-3" },
+                    React.createElement('button', { onClick: onClose, className: "px-6 py-3 bg-gray-100 dark:bg-slate-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-slate-500 transition border border-gray-300 dark:border-gray-500" }, "Cancelar"),
+                    React.createElement('button', { 
+                        onClick: handleGenerate,
+                        disabled: isLoading || isListening,
+                        className: "px-6 py-3 bg-primary text-white rounded-md hover:bg-blue-700 transition shadow-sm hover:shadow-md active:scale-95 flex items-center justify-center disabled:bg-gray-400" 
+                    }, isLoading ? React.createElement('i', { className: 'fas fa-spinner animate-spin' }) : "Analisar com IA e Gerar PDF")
+                )
+            )
+        );
+    };
+
+    // --- From App.tsx ---
+    const App = () => {
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [currentView, setCurrentView] = useState('menu');
+      const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+      const [isBudgetTypeModalOpen, setIsBudgetTypeModalOpen] = useState(false);
+      const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+      const [isQuickVoiceModalOpen, setIsQuickVoiceModalOpen] = useState(false);
+      const [budgetToLoad, setBudgetToLoad] = useState(null);
+      
+      const [savedBudgets, setSavedBudgets] = useState([]);
+      const [companyInfo, setCompanyInfo] = useState(DEFAULT_COMPANY_INFO);
+      const [servicePrices, setServicePrices] = useState(DEFAULT_SERVICE_PRICES);
+
+      useEffect(() => {
+          try {
+              const creds = localStorage.getItem('rd-credentials');
+              if (!creds) {
+                localStorage.setItem('rd-credentials', JSON.stringify({ username: 'admin', password: 'admin' }));
+              }
+          } catch (e) {
+              console.error("Error with credentials, resetting to default.");
+              localStorage.setItem('rd-credentials', JSON.stringify({ username: 'admin', password: 'admin' }));
+          }
+          
+          try {
+              const budgets = localStorage.getItem('rd-budgets');
+              if (budgets) setSavedBudgets(JSON.parse(budgets));
+          } catch (e) { console.error("Could not load budgets."); }
+
+          try {
+              const info = localStorage.getItem('rd-company-info');
+              if (info) setCompanyInfo(JSON.parse(info));
+          } catch (e) { console.error("Could not load company info."); }
+
+          try {
+              const prices = localStorage.getItem('rd-service-prices');
+              if (prices) setServicePrices(JSON.parse(prices));
+          } catch (e) { console.error("Could not load service prices."); }
+      }, []);
+
+      const handleSavePrices = useCallback((newPrices) => {
+        setServicePrices(newPrices);
+        localStorage.setItem('rd-service-prices', JSON.stringify(newPrices));
+      }, []);
+
+      const handleSaveCompanyInfo = useCallback((newInfo) => {
+        setCompanyInfo(newInfo);
+        localStorage.setItem('rd-company-info', JSON.stringify(newInfo));
+      }, []);
+
+      const handleSaveBudget = (budgetData) => {
+          setSavedBudgets(prev => {
+              const existingIndex = prev.findIndex(b => b.id === budgetData.id);
+              let newBudgets;
+              if (existingIndex > -1) {
+                  newBudgets = [...prev];
+                  newBudgets[existingIndex] = budgetData;
+              } else {
+                  newBudgets = [...prev, budgetData];
+              }
+              localStorage.setItem('rd-budgets', JSON.stringify(newBudgets));
+              return newBudgets;
+          });
+      };
+
+      const handleDeleteBudget = (budgetId) => {
+          if (window.confirm("Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita.")) {
+              setSavedBudgets(prev => {
+                  const newBudgets = prev.filter(b => b.id !== budgetId);
+                  localStorage.setItem('rd-budgets', JSON.stringify(newBudgets));
+                  return newBudgets;
+              });
+          }
+      };
+
+      const handleLoadBudget = (budget) => {
+          setBudgetToLoad(budget);
+          if(budget.type === 'technical') {
+              setCurrentView('budget');
+          } else {
+              setCurrentView('quickBudget');
+          }
+      };
+      
+      const resetToMenu = () => {
+          setBudgetToLoad(null);
+          setCurrentView('menu');
+      }
+
+      const handleSelectBudgetType = (type) => {
+          setIsBudgetTypeModalOpen(false);
+          setBudgetToLoad(null); 
+          if (type === 'technical') setCurrentView('budget');
+          else if (type === 'quick') setCurrentView('quickBudget');
+          else if (type === 'quickVoice') setIsQuickVoiceModalOpen(true);
+          else if (type === 'requestApiKey') setIsSettingsOpen(true);
+      };
+
+      const renderView = () => {
+        switch (currentView) {
+          case 'budget': return React.createElement(BudgetCalculatorView, { onBack: resetToMenu, servicePrices: servicePrices, onSave: handleSaveBudget, loadedBudget: budgetToLoad, companyInfo: companyInfo, onRequestSettings: () => setIsSettingsOpen(true) });
+          case 'quickBudget': return React.createElement(QuickBudgetView, { onBack: resetToMenu, servicePrices: servicePrices, onSave: handleSaveBudget, loadedBudget: budgetToLoad, companyInfo: companyInfo });
+          case 'savedBudgets': return React.createElement(SavedBudgetsView, { budgets: savedBudgets, onBack: resetToMenu, onLoad: handleLoadBudget, onDelete: handleDeleteBudget });
+          default: return React.createElement(MainMenu, { onOpenBudgetTypeModal: () => setIsBudgetTypeModalOpen(true), onOpenSettings: () => setIsSettingsOpen(true), onOpenChangePassword: () => setIsChangePasswordOpen(true), onShowSavedBudgets: () => setCurrentView('savedBudgets') });
+        }
+      };
+
+      if (!isAuthenticated) {
+          return React.createElement(LoginScreen, { onLoginSuccess: () => setIsAuthenticated(true) });
+      }
+
+      return React.createElement('div', { className: "bg-bg dark:bg-slate-900 min-h-screen font-sans text-text" },
+        React.createElement(Header, { companyInfo: companyInfo }),
+        React.createElement('main', { className: "container max-w-4xl mx-auto p-5" }, renderView()),
+        React.createElement(SettingsModal, { 
+            isOpen: isSettingsOpen, 
+            onClose: () => setIsSettingsOpen(false), 
+            currentPrices: servicePrices, 
+            onSavePrices: handleSavePrices,
+            companyInfo: companyInfo,
+            onSaveCompanyInfo: handleSaveCompanyInfo
+        }),
+        React.createElement(BudgetTypeModal, { isOpen: isBudgetTypeModalOpen, onClose: () => setIsBudgetTypeModalOpen(false), onSelect: handleSelectBudgetType, hasApiKey: !!companyInfo.apiKey }),
+        React.createElement(QuickVoiceBudgetModal, { isOpen: isQuickVoiceModalOpen, onClose: () => setIsQuickVoiceModalOpen(false), companyInfo: companyInfo }),
+        React.createElement(ChangePasswordModal, { isOpen: isChangePasswordOpen, onClose: () => setIsChangePasswordOpen(false) }),
+        React.createElement(DarkModeToggle, null)
+      );
+    };
+
+    // --- From index.tsx ---
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(React.createElement(React.StrictMode, null, React.createElement(ThemeProvider, null, React.createElement(App, null))));
+  </script>
+</body>
+</html>
