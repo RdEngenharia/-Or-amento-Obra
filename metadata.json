@@ -1,0 +1,5 @@
+{
+  "name": "Gerador de Orçamentos Solar",
+  "description": "Uma aplicação para gerar propostas comerciais personalizadas para sistemas de energia solar fotovoltaica, incluindo cálculos técnicos, análise financeira e geração de PDF.",
+  "requestFramePermissions": []
+}
