@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      // Adicionamos a base para que o GitHub Pages encontre os arquivos corretamente
-      base: '/-Or-amento-Obra/',
+      // NOME CORRIGIDO AQUI:
+      base: '/Gerador-de-Or-amento-Solar/',
       server: {
         port: 3000,
         host: '0.0.0.0',
