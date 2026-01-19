@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      // NOME CORRIGIDO AQUI:
+      // Base corrigida para o nome exato do repositório no GitHub
       base: '/Gerador-de-Or-amento-Solar/',
       server: {
         port: 3000,
